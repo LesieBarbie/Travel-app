@@ -1,15 +1,35 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useTravel } from '../context/TravelContext';
 import { ACHIEVEMENTS } from '../data/achievements';
+import Achievement from '../models/Achievement';
 
+/**
+ * Екран досягнень. Використовує модель Achievement як об'єкти,
+ * які рендеряться у UI (поля title, description, icon, unlocked
+ * беруться з екземплярів моделі).
+ */
 export default function AchievementsScreen() {
   const { visited, dream } = useTravel();
 
-  const items = ACHIEVEMENTS.map((a) => ({
-    ...a,
-    unlocked: a.check(visited, dream),
-  }));
+  // Створюємо колекцію екземплярів моделі Achievement з поточним станом
+  const items = useMemo(() => {
+    return ACHIEVEMENTS.map((a) => {
+      const ach = new Achievement(
+        a.id,
+        a.title,
+        a.description,
+        a.icon,
+        0,              // requiredCount (не використовуємо тут)
+        a.check(visited, dream),
+        null
+      );
+      if (ach.unlocked) ach.unlockedAt = new Date();
+      // Зберігаємо оригінальну check-функцію для подальшого використання
+      ach._check = a.check;
+      return ach;
+    });
+  }, [visited, dream]);
 
   const unlockedCount = items.filter((i) => i.unlocked).length;
 

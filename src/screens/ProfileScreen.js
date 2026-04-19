@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,27 @@ import {
 import { useTravel } from '../context/TravelContext';
 import { TOTAL_COUNTRIES, CONTINENT_COUNTS, getCountryById } from '../data/countries';
 import { getUnlockedAchievements, ACHIEVEMENTS } from '../data/achievements';
+import UserProfile from '../models/UserProfile';
 
 export default function ProfileScreen() {
   const { visited, dream, resetAll } = useTravel();
   const unlocked = getUnlockedAchievements(visited, dream);
+
+  // Створюємо екземпляр моделі UserProfile на льоту з актуальних даних.
+  // Поля моделі (ім'я, кількість країн, відсоток, ранг) напряму
+  // використовуються у UI нижче.
+  const profile = useMemo(() => {
+    const percent = (visited.length / TOTAL_COUNTRIES) * 100;
+    return new UserProfile(
+      'Мандрівник',       // name
+      visited.length,     // visitedCount
+      dream.length,       // dreamCount
+      parseFloat(percent.toFixed(1)),  // worldPercent
+      unlocked.length,    // achievementsUnlocked
+      true,               // notificationsEnabled
+      new Date()          // joinedAt (у реальному застосунку - береться з першого запуску)
+    );
+  }, [visited.length, dream.length, unlocked.length]);
 
   const confirmReset = () => {
     Alert.alert(
@@ -25,8 +42,6 @@ export default function ProfileScreen() {
       ]
     );
   };
-
-  const percent = ((visited.length / TOTAL_COUNTRIES) * 100).toFixed(1);
 
   const perContinent = {};
   for (const v of visited) {
@@ -40,17 +55,25 @@ export default function ProfileScreen() {
         <View style={styles.avatar}>
           <Text style={styles.avatarTxt}>🧭</Text>
         </View>
-        <Text style={styles.name}>Мандрівник</Text>
+        <Text style={styles.name}>{profile.name}</Text>
+        <Text style={styles.rank}>{profile.getRank()}</Text>
         <Text style={styles.subtitle}>
-          {visited.length} країн • {percent}% світу
+          {profile.visitedCount} країн • {profile.worldPercent}% світу
         </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>📊 Статистика</Text>
-        <Row label="Відвідано країн" value={visited.length} />
-        <Row label="У мріях" value={dream.length} />
-        <Row label="Досягнень отримано" value={`${unlocked.length} / ${ACHIEVEMENTS.length}`} />
+        <Row label="Відвідано країн" value={profile.visitedCount} />
+        <Row label="У мріях" value={profile.dreamCount} />
+        <Row
+          label="Досягнень отримано"
+          value={`${profile.achievementsUnlocked} / ${ACHIEVEMENTS.length}`}
+        />
+        <Row
+          label="Сповіщення"
+          value={profile.notificationsEnabled ? 'Увімкнено' : 'Вимкнено'}
+        />
       </View>
 
       <View style={styles.card}>
@@ -113,6 +136,7 @@ const styles = StyleSheet.create({
   },
   avatarTxt: { fontSize: 40 },
   name: { fontSize: 20, fontWeight: '700' },
+  rank: { fontSize: 16, fontWeight: '500', color: '#2e7d32', marginTop: 4 },
   subtitle: { fontSize: 14, color: '#666', marginTop: 4 },
   card: {
     backgroundColor: '#fff',
