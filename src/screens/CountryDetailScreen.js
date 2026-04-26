@@ -1,27 +1,53 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+ StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  Alert,
+  Modal,
+} from 'react-native';
+
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+
 import CountryRegionMap from '../components/CountryRegionMap';
 import { useTravel } from '../context/TravelContext';
 import { COUNTRIES_WITH_REGIONS, getCountryById } from '../data/countries';
 import Country from '../models/Country';
 
-/**
- * Екран ДЕТАЛІ обраної країни.
- * Дані беруться з екземпляру моделі Country: відображаються поля
- * name, continent, visited, isDream, dateVisited, note, а також
- * методи getStatus() та getDaysSinceVisit().
- */
-export default function CountryDetailScreen({ route }) {
+export default function CountryDetailScreen({ route, navigation }) {
   const { countryId, name } = route.params;
-  const config = COUNTRIES_WITH_REGIONS[countryId];
-  const { regions, toggleRegion, visited, dream, updateNote } = useTravel();
 
-  // Створюємо екземпляр Country з актуальних даних.
-  // UI нижче працює напряму з полями/методами цього об'єкта.
+  const config = COUNTRIES_WITH_REGIONS[countryId];
+
+
+  const {
+    regions,
+    toggleRegion,
+    visited,
+    dream,
+    updateNote,
+    addCountryPhoto,
+    removeCountryPhoto,
+  } = useTravel();
+
+  // =========================
+  // 📸 FULLSCREEN VIEW
+  // =========================
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+
+  // =========================
+  // COUNTRY MODEL
+  // =========================
   const country = useMemo(() => {
     const meta = getCountryById(countryId);
     const v = visited.find((c) => c.id === countryId);
     const d = dream.find((c) => c.id === countryId);
+
     return new Country(
       countryId,
       name,
@@ -29,86 +55,235 @@ export default function CountryDetailScreen({ route }) {
       !!v,
       !!d,
       v?.date ? new Date(v.date) : null,
-      v?.note || d?.note || ''
+      v?.note || d?.note || '',
+      v?.photos || d?.photos || []
     );
   }, [countryId, name, visited, dream]);
 
   const visitedRegions = regions[countryId] || [];
+  const photos = Array.isArray(country.photos) ? country.photos : [];
+
+  // =========================
+  // 📸 PICK IMAGE
+  // =========================
+const pickImage = async () => {
+  try {
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Немає доступу');
+      return;
+    }
+
+    if (!country.visited && !country.isDream) {
+      Alert.alert('Спочатку додай країну');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets?.length > 0) {
+      const originalUri = result.assets[0].uri;
+
+      const newPath =
+        FileSystem.documentDirectory +
+        'photos/' +
+        Date.now() +
+        '.jpg';
+
+      const dir = FileSystem.documentDirectory + 'photos/';
+
+const dirInfo = await FileSystem.getInfoAsync(dir);
+
+if (!dirInfo.exists) {
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+}
+
+      await FileSystem.copyAsync({
+        from: originalUri,
+        to: newPath,
+      });
+
+      addCountryPhoto(countryId, newPath);
+    }
+  } catch (e) {
+    console.log(e);
+    Alert.alert('Помилка', 'Не вдалося обрати фото');
+  }
+};
+
+  const handleDelete = (uri) => {
+    Alert.alert('Видалити фото?', 'Цю дію не можна скасувати', [
+      { text: 'Скасувати', style: 'cancel' },
+      {
+        text: 'Видалити',
+        style: 'destructive',
+        onPress: () =>
+          removeCountryPhoto(countryId, uri)
+      },
+    ]);
+  };
+
+  // =========================
+  console.log('COUNTRY PHOTOS:', photos);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Основна інформація — поля моделі Country */}
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>{country.name}</Text>
-        <Text style={styles.continent}>🌍 {country.continent}</Text>
-        <Text style={styles.status}>{country.getStatus()}</Text>
-        {country.dateVisited && (
-          <Text style={styles.date}>
-            📅 Відвідано: {country.dateVisited.toLocaleDateString('uk-UA')}
-            {country.getDaysSinceVisit() !== null &&
-              ` (${country.getDaysSinceVisit()} дн. тому)`}
-          </Text>
-        )}
-      </View>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        {/* HEADER */}
+        <View style={styles.headerCard}>
+          <Text style={styles.title}>{country.name}</Text>
+          <Text style={styles.continent}>🌍 {country.continent}</Text>
+          <Text style={styles.status}>{country.getStatus()}</Text>
 
-      {/* Мапа регіонів (якщо є) */}
-      {config && (
-        <>
-          <Text style={styles.hint}>
-            Торкнись регіону, щоб позначити його як відвіданий.
-          </Text>
-          <CountryRegionMap
-            config={config}
-            countryId={countryId}
-            visitedRegions={visitedRegions}
-            onRegionPress={(regionName) => toggleRegion(countryId, regionName)}
-          />
-          <View style={styles.stats}>
-            <Text style={styles.statsTxt}>
-              Відвідано регіонів: {visitedRegions.length}
+          {country.dateVisited && (
+            <Text style={styles.date}>
+              📅 Відвідано: {country.dateVisited.toLocaleDateString('uk-UA')}
             </Text>
+          )}
+        </View>
+
+        {/* MAP */}
+        {config && (
+          <>
+            <Text style={styles.hint}>
+              Торкнись регіону, щоб позначити або відкрити його
+            </Text>
+
+            <CountryRegionMap
+              config={config}
+              countryId={countryId}
+              visitedRegions={visitedRegions}
+              onRegionPress={(regionName) => {
+                const exists = visitedRegions.find(
+                  (r) => r.name === regionName
+                );
+
+                if (exists) {
+                  navigation.navigate('RegionDetail', {
+                    countryId,
+                    regionName,
+                  });
+                } else {
+                  toggleRegion(countryId, regionName);
+                }
+              }}
+            />
+
+            <View style={styles.stats}>
+              <Text style={styles.statsTxt}>
+                Відвідано регіонів: {visitedRegions.length}
+              </Text>
+            </View>
+          </>
+        )}
+
+        {/* REGIONS */}
+        {visitedRegions.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Відвідані регіони</Text>
+
+            {visitedRegions.map((r, index) => (
+              <TouchableOpacity
+                key={`${r.name}-${index}`}
+                onPress={() =>
+                  navigation.navigate('RegionDetail', {
+                    countryId,
+                    regionName: r.name,
+                  })
+                }
+              >
+                <Text style={styles.regionItem}>• {r.name}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        </>
-      )}
+        )}
 
-      {!config && (
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTxt}>
-            Для цієї країни поки немає детальної карти регіонів.
-          </Text>
-        </View>
-      )}
+        {/* NOTE */}
+        {(country.visited || country.isDream) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>📝 Нотатка</Text>
 
-      {visitedRegions.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Відвідані регіони</Text>
-          {visitedRegions.map((r) => (
-            <Text key={r} style={styles.regionItem}>• {r}</Text>
-          ))}
-        </View>
-      )}
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Твої враження або плани..."
+              multiline
+              value={country.note || ''}
+              onChangeText={(text) =>
+                updateNote(
+                  country.visited ? 'visited' : 'dream',
+                  countryId,
+                  text
+                )
+              }
+            />
+          </View>
+        )}
 
-      {/* Нотатка — редагуємо поле country.note */}
-      {(country.visited || country.isDream) && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>📝 Нотатка</Text>
-          <TextInput
-            style={styles.noteInput}
-            placeholder="Твої враження або плани..."
-            multiline
-            value={country.note}
-            onChangeText={(text) =>
-              updateNote(country.visited ? 'visited' : 'dream', countryId, text)
-            }
-          />
+        {/* PHOTOS */}
+        {(country.visited || country.isDream) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>📸 Фото</Text>
+
+            {photos.length === 0 && (
+              <Text style={styles.empty}>Поки що немає фото</Text>
+            )}
+
+            {photos.map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.photoWrapper}>
+                <TouchableOpacity onPress={() => setSelectedPhoto(uri)}>
+                  <Image source={{ uri }} style={styles.photo} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete(uri)}
+                >
+                  <Text style={styles.deleteTxt}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.addBtn} onPress={pickImage}>
+              <Text style={styles.addTxt}>➕ Додати фото</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* =========================
+          FULLSCREEN MODAL
+      ========================= */}
+      <Modal visible={!!selectedPhoto} transparent>
+        <View style={styles.modal}>
+          <TouchableOpacity
+            style={styles.modalClose}
+            onPress={() => setSelectedPhoto(null)}
+          >
+            <Text style={{ color: '#fff', fontSize: 18 }}>✕</Text>
+          </TouchableOpacity>
+
+          <Image source={{ uri: selectedPhoto }} style={styles.fullImage} />
         </View>
-      )}
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
+// =========================
+// STYLES
+// =========================
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+
   headerCard: {
     padding: 20,
     backgroundColor: '#f5f7fa',
@@ -116,39 +291,86 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  title: { fontSize: 24, fontWeight: '700', color: '#111' },
+
+  title: { fontSize: 24, fontWeight: '700' },
   continent: { fontSize: 14, color: '#666', marginTop: 6 },
   status: { fontSize: 16, fontWeight: '600', marginTop: 8 },
   date: { fontSize: 13, color: '#2e7d32', marginTop: 6 },
-  hint: {
-    textAlign: 'center',
-    color: '#666',
-    marginVertical: 8,
-    paddingHorizontal: 16,
-  },
+
+  hint: { textAlign: 'center', marginVertical: 8 },
   stats: { padding: 16, alignItems: 'center' },
   statsTxt: { fontSize: 16, fontWeight: '600' },
+
   card: {
     backgroundColor: '#f7f7f7',
     margin: 12,
     padding: 14,
     borderRadius: 10,
   },
-  cardTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  regionItem: { fontSize: 14, paddingVertical: 2 },
+
+  cardTitle: { fontWeight: '700', marginBottom: 8 },
+
+  regionItem: { paddingVertical: 4 },
+
   noteInput: {
     minHeight: 80,
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 10,
-    textAlignVertical: 'top',
-    fontSize: 14,
   },
-  infoCard: {
-    margin: 12,
-    padding: 14,
-    backgroundColor: '#fff3e0',
-    borderRadius: 10,
+
+  empty: { color: '#999' },
+
+  photoWrapper: {
+    marginBottom: 12,
+    position: 'relative',
   },
-  infoTxt: { color: '#666', textAlign: 'center' },
+
+photo: {
+  width: '100%',
+  height: 220,
+  borderRadius: 10,
+  resizeMode: 'contain',
+  backgroundColor: '#000',
+},
+
+  deleteBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+  },
+
+  deleteTxt: { color: '#fff' },
+
+  addBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#eee',
+    borderRadius: 8,
+  },
+
+  addTxt: { fontWeight: '600' },
+
+  modal: {
+    flex: 1,
+    backgroundColor: 'black',
+    justifyContent: 'center',
+  },
+
+  fullImage: {
+    width: '100%',
+    height: '80%',
+    resizeMode: 'contain',
+  },
+
+  modalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
 });

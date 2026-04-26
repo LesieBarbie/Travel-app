@@ -1,5 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Dimensions, Text } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  ActivityIndicator,
+  StyleSheet,
+  Dimensions,
+  Text,
+} from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
 import { geoMercator, geoAlbersUsa, geoPath, geoContains } from 'd3-geo';
 import { feature } from 'topojson-client';
@@ -8,10 +14,9 @@ import { TapGestureHandler, State } from 'react-native-gesture-handler';
 const { width: SCREEN_W } = Dimensions.get('window');
 const MAP_HEIGHT = 380;
 
-/**
- * Дістає назву регіону з properties - перебираємо поширені варіанти.
- * Різні джерела GeoJSON використовують різні ключі.
- */
+// =========================
+// 🔥 NAME PARSER
+// =========================
 function getRegionName(feature, index) {
   const p = feature.properties || {};
   return (
@@ -26,15 +31,22 @@ function getRegionName(feature, index) {
   );
 }
 
-/**
- * Детальна карта країни з регіонами.
- * Обробка тапів через TapGestureHandler + geoContains hit-testing
- * (працює і на iOS, і на Android).
- */
-export default function CountryRegionMap({ config, visitedRegions, onRegionPress, countryId }) {
+export default function CountryRegionMap({
+  config,
+  visitedRegions,
+  onRegionPress,
+  countryId,
+}) {
   const [features, setFeatures] = useState(null);
   const [error, setError] = useState(null);
 
+  // 🔥 zoom / pan state
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+
+  // =========================
+  // 🔥 LOAD DATA
+  // =========================
   useEffect(() => {
     setFeatures(null);
     setError(null);
@@ -43,13 +55,15 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
       try {
         if (config.isGeoboundaries) {
           const metaRes = await fetch(config.url);
-          if (!metaRes.ok) throw new Error(`HTTP ${metaRes.status} (meta)`);
+          if (!metaRes.ok) throw new Error(`HTTP ${metaRes.status}`);
+
           const meta = await metaRes.json();
-          const geojsonUrl = meta.simplifiedGeometryGeoJSON || meta.gjDownloadURL;
-          if (!geojsonUrl) throw new Error('geoBoundaries: geojson URL not found');
+          const geojsonUrl =
+            meta.simplifiedGeometryGeoJSON || meta.gjDownloadURL;
 
           const geoRes = await fetch(geojsonUrl);
-          if (!geoRes.ok) throw new Error(`HTTP ${geoRes.status} (geo)`);
+          if (!geoRes.ok) throw new Error(`HTTP ${geoRes.status}`);
+
           const geoData = await geoRes.json();
           setFeatures(geoData.features || []);
           return;
@@ -57,11 +71,11 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
 
         const res = await fetch(config.url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const data = await res.json();
 
         if (config.topojsonObject) {
           const obj = data.objects?.[config.topojsonObject];
-          if (!obj) throw new Error(`TopoJSON object "${config.topojsonObject}" not found`);
           const geo = feature(data, obj);
           setFeatures(geo.features || []);
         } else {
@@ -69,52 +83,69 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
         }
       } catch (e) {
         console.warn('Region map load error:', e);
-        setError(e.message || 'Unknown error');
+        setError(e.message);
       }
     };
 
     loadData();
-  }, [config.url, config.topojsonObject, config.isGeoboundaries]);
+  }, [config]);
 
+  // =========================
+  // 🔥 PROJECTION
+  // =========================
   const { pathGen, projection, width, height } = useMemo(() => {
     const w = SCREEN_W - 20;
     const h = MAP_HEIGHT;
 
-    // Для США - спеціальна проекція Albers USA
     if (countryId === '840') {
       const proj = geoAlbersUsa()
         .scale(w * 1.2)
         .translate([w / 2, h / 2]);
+
       return { pathGen: geoPath(proj), projection: proj, width: w, height: h };
     }
 
     const adjustedScale = (config.scale * w) / 800;
+
     const proj = geoMercator()
       .center(config.center)
       .scale(adjustedScale)
       .translate([w / 2, h / 2]);
+
     return { pathGen: geoPath(proj), projection: proj, width: w, height: h };
   }, [config, countryId]);
 
+  // =========================
+  // 🔥 PATHS
+  // =========================
   const paths = useMemo(() => {
     if (!features) return [];
+
     return features
       .map((f, i) => {
         const name = getRegionName(f, i);
         const d = pathGen(f);
+
         if (!d) return null;
-        return { name, d, key: `${name}-${i}`, feature: f };
+
+        return {
+          name,
+          d,
+          key: `${name}-${i}`,
+          feature: f,
+        };
       })
       .filter(Boolean);
   }, [features, pathGen]);
 
-  // Hit-test при тапі: знаходимо регіон під пальцем
+  // =========================
+  // 🔥 TAP DETECTION
+  // =========================
   const onTap = (e) => {
     if (e.nativeEvent.state !== State.ACTIVE) return;
-    if (!features) return;
 
-    const x = e.nativeEvent.x;
-    const y = e.nativeEvent.y;
+    const x = (e.nativeEvent.x - translate.x) / scale;
+    const y = (e.nativeEvent.y - translate.y) / scale;
 
     const coords = projection.invert([x, y]);
     if (!coords) return;
@@ -127,6 +158,9 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
     }
   };
 
+  // =========================
+  // 🔥 RENDER STATES
+  // =========================
   if (error) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -140,7 +174,7 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" />
-        <Text style={styles.loadTxt}>Завантажую карту регіонів...</Text>
+        <Text style={styles.loadTxt}>Завантажую карту...</Text>
       </View>
     );
   }
@@ -153,14 +187,25 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
     );
   }
 
+  // =========================
+  // 🔥 RENDER
+  // =========================
   return (
     <View style={styles.container}>
-      <TapGestureHandler onHandlerStateChange={onTap} maxDurationMs={350} maxDeltaX={10} maxDeltaY={10}>
+      <TapGestureHandler onHandlerStateChange={onTap}>
         <View style={{ width, height }}>
-          <Svg width={width} height={height} pointerEvents="none">
-            <G>
+          <Svg width={width} height={height}>
+            <G
+              transform={`
+                translate(${translate.x}, ${translate.y})
+                scale(${scale})
+              `}
+            >
               {paths.map((p) => {
-                const isVisited = visitedRegions.includes(p.name);
+                const isVisited = visitedRegions.some(
+                  (r) => r.name === p.name
+                );
+
                 return (
                   <Path
                     key={p.key}
@@ -179,6 +224,9 @@ export default function CountryRegionMap({ config, visitedRegions, onRegionPress
   );
 }
 
+// =========================
+// 🎨 STYLES
+// =========================
 const styles = StyleSheet.create({
   container: {
     width: SCREEN_W - 20,
@@ -188,8 +236,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignSelf: 'center',
   },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  loadTxt: { marginTop: 10, color: '#666' },
-  err: { color: '#c62828', fontWeight: '600', marginBottom: 6 },
-  errSmall: { color: '#999', fontSize: 12, paddingHorizontal: 20, textAlign: 'center' },
+
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  loadTxt: {
+    marginTop: 10,
+    color: '#666',
+  },
+
+  err: {
+    color: '#c62828',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+
+  errSmall: {
+    color: '#999',
+    fontSize: 12,
+    paddingHorizontal: 20,
+    textAlign: 'center',
+  },
 });

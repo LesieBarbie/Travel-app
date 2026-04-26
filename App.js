@@ -7,11 +7,14 @@ import { Text, View, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { TravelProvider, useTravel } from './src/context/TravelContext';
+
 import MapScreen from './src/screens/MapScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import AchievementsScreen from './src/screens/AchievementsScreen';
 import CountryDetailScreen from './src/screens/CountryDetailScreen';
 import CountriesListScreen from './src/screens/CountriesListScreen';
+import RegionDetailScreen from './src/screens/RegionDetailScreen'; // 🔥 ДОДАНО
+
 import AchievementToast from './src/components/AchievementToast';
 import { requestNotificationPermissions } from './src/utils/notifications';
 
@@ -24,11 +27,14 @@ const Tab = createBottomTabNavigator();
 const MapStackNav = createNativeStackNavigator();
 const ListStackNav = createNativeStackNavigator();
 
-// Стек для вкладки "Мапа": MapScreen → CountryDetail
+// =========================
+// 🔥 MAP STACK
+// =========================
 function MapStack() {
   return (
     <MapStackNav.Navigator screenOptions={{ headerShown: false }}>
       <MapStackNav.Screen name="MapMain" component={MapScreen} />
+
       <MapStackNav.Screen
         name="CountryDetail"
         component={CountryDetailScreen}
@@ -38,15 +44,32 @@ function MapStack() {
           headerBackTitle: 'Назад',
         })}
       />
+
+      {/* 🔥 НОВИЙ ЕКРАН */}
+      <MapStackNav.Screen
+        name="RegionDetail"
+        component={RegionDetailScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          title: route.params?.regionName || 'Регіон',
+          headerBackTitle: 'Назад',
+        })}
+      />
     </MapStackNav.Navigator>
   );
 }
 
-// Стек для вкладки "Список": CountriesList → CountryDetail
+// =========================
+// 🔥 LIST STACK
+// =========================
 function ListStack() {
   return (
     <ListStackNav.Navigator screenOptions={{ headerShown: false }}>
-      <ListStackNav.Screen name="CountriesList" component={CountriesListScreen} />
+      <ListStackNav.Screen
+        name="CountriesList"
+        component={CountriesListScreen}
+      />
+
       <ListStackNav.Screen
         name="CountryDetail"
         component={CountryDetailScreen}
@@ -56,14 +79,31 @@ function ListStack() {
           headerBackTitle: 'Назад',
         })}
       />
+
+      {/* 🔥 ТУТ ТЕЖ ДОДАЄМО */}
+      <ListStackNav.Screen
+        name="RegionDetail"
+        component={RegionDetailScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          title: route.params?.regionName || 'Регіон',
+          headerBackTitle: 'Назад',
+        })}
+      />
     </ListStackNav.Navigator>
   );
 }
 
+// =========================
+// 🔥 TAB ICON
+// =========================
 function tabIcon(emoji) {
   return () => <Text style={{ fontSize: 22 }}>{emoji}</Text>;
 }
 
+// =========================
+// 🔥 APP CONTENT
+// =========================
 function AppContent() {
   const { pendingToast, hideToast } = useTravel();
 
@@ -82,16 +122,19 @@ function AppContent() {
             component={MapStack}
             options={{ title: 'Мапа', tabBarIcon: tabIcon('🗺️') }}
           />
+
           <Tab.Screen
             name="List"
             component={ListStack}
             options={{ title: 'Список', tabBarIcon: tabIcon('📋') }}
           />
+
           <Tab.Screen
             name="Achievements"
             component={AchievementsScreen}
             options={{ title: 'Досягнення', tabBarIcon: tabIcon('🏆') }}
           />
+
           <Tab.Screen
             name="Profile"
             component={ProfileScreen}
@@ -99,12 +142,16 @@ function AppContent() {
           />
         </Tab.Navigator>
       </NavigationContainer>
+
       <AchievementToast achievement={pendingToast} onHide={hideToast} />
       <StatusBar style="auto" />
     </View>
   );
 }
 
+// =========================
+// 🔥 ROOT
+// =========================
 export default function App() {
   useEffect(() => {
     requestNotificationPermissions();
