@@ -97,8 +97,13 @@ function WorldMapSvgInner({ getFill, onCountryPress }) {
     const tapX = e.nativeEvent.x;
     const tapY = e.nativeEvent.y;
 
-    const svgX = (tapX - baseTx) / baseScale;
-    const svgY = (tapY - baseTy) / baseScale;
+    // Центр View — точка, относительно которой применяется scale
+    const originX = width / 2;
+    const originY = height / 2;
+
+    // Инвертируем трансформацию с учётом центра масштабирования
+    const svgX = (tapX - baseTx - originX) / baseScale + originX;
+    const svgY = (tapY - baseTy - originY) / baseScale + originY;
 
     const coords = projection.invert([svgX, svgY]);
     if (!coords) return;

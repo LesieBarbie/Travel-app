@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 
 import WorldMapSvg from '../components/WorldMapSvg';
@@ -32,7 +33,6 @@ export default function MapScreen({ navigation }) {
     return '#e0e0e0';
   };
 
-  // 🔥 ЄДИНА ЛОГІКА ДЛЯ МАПИ І ГЛОБУСА
   const handleCountryPress = (id, name) => {
     const hasRegions = !!COUNTRIES_WITH_REGIONS[id];
     const isVisited = visited.find((c) => c.id === id);
@@ -92,7 +92,7 @@ export default function MapScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
 
       {/* 🔁 ПЕРЕМИКАЧ */}
       <View style={styles.viewToggle}>
@@ -145,11 +145,11 @@ export default function MapScreen({ navigation }) {
             onCountryPress={handleMapPress}
           />
         ) : (
-            <GlobeScreen
-              visited={visited}
-              dream={dream}
-              onCountryPress={handleMapPress}
-            />
+          <GlobeScreen
+            visited={visited}
+            dream={dream}
+            onCountryPress={handleMapPress}
+          />
         )}
       </View>
 
@@ -174,7 +174,7 @@ export default function MapScreen({ navigation }) {
         </View>
       </ScrollView>
 
-    </View>
+    </SafeAreaView>
   );
 }
 
