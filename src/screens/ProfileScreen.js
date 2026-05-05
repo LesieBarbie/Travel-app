@@ -1,5 +1,5 @@
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,30 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useTravel } from '../context/TravelContext';
+import { useAuth } from '../context/AuthContext';
 import { TOTAL_COUNTRIES, CONTINENT_COUNTS, getCountryById } from '../data/countries';
 import { getUnlockedAchievements, ACHIEVEMENTS } from '../data/achievements';
 import UserProfile from '../models/UserProfile';
-import { setOnline, getOnline } from '../api/client';
+import { setDemoOffline, getDemoOffline, subscribeDemoOffline } from '../api/supabaseClient';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { visited, dream, resetAll, syncPending } = useTravel();
+  const { user, signOut } = useAuth();
   const unlocked = getUnlockedAchievements(visited, dream);
 
   const [syncing, setSyncing] = useState(false);
-  const [online, setOnlineState] = useState(getOnline());
+  const [online, setOnlineState] = useState(!getDemoOffline());
+  const [signingOut, setSigningOut] = useState(false);
+
+  // Підписуємось на зміни прапорця "demo offline" - щоб UI оновлювався
+  // якщо хтось ще його змінив (наприклад, у фоні)
+  useEffect(() => {
+    const unsub = subscribeDemoOffline((isOffline) => {
+      setOnlineState(!isOffline);
+    });
+    return unsub;
+  }, []);
 
   const profile = useMemo(() => {
     const percent = (visited.length / TOTAL_COUNTRIES) * 100;
@@ -62,9 +74,35 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleSignOut = () => {
+    Alert.alert(
+      'Вийти з акаунту?',
+      'Локальні дані залишаться, але для перегляду треба буде увійти знову.',
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        {
+          text: 'Вийти',
+          style: 'destructive',
+          onPress: async () => {
+            setSigningOut(true);
+            try {
+              await signOut();
+            } catch (e) {
+              Alert.alert('Помилка', e.message);
+            } finally {
+              setSigningOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const toggleOnline = () => {
     const newValue = !online;
-    setOnline(newValue);
+    // Якщо newValue=true (онлайн), то demoOffline=false
+    // Якщо newValue=false (офлайн), то demoOffline=true
+    setDemoOffline(!newValue);
     setOnlineState(newValue);
   };
 
@@ -75,7 +113,10 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top }]}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       <View style={styles.header}>
         <View style={styles.avatar}>
           <Text style={styles.avatarTxt}>🧭</Text>
@@ -86,6 +127,26 @@ export default function ProfileScreen() {
           {profile.visitedCount} країн • {profile.worldPercent}% світу
         </Text>
       </View>
+
+      {/* Блок акаунта */}
+      {user && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>👤 Акаунт</Text>
+          <Row label="Email" value={user.email} />
+          <Row label="ID" value={user.id?.slice(0, 8) + '...'} />
+          <TouchableOpacity
+            style={[styles.signOutBtn, signingOut && styles.primaryBtnDisabled]}
+            onPress={handleSignOut}
+            disabled={signingOut}
+          >
+            {signingOut ? (
+              <ActivityIndicator color="#c62828" />
+            ) : (
+              <Text style={styles.signOutTxt}>🚪 Вийти з акаунту</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>📊 Статистика</Text>
@@ -221,6 +282,12 @@ const styles = StyleSheet.create({
     borderRadius: 10, alignItems: 'center',
   },
   secondaryTxt: { color: '#333', fontWeight: '600' },
+  signOutBtn: {
+    marginTop: 12, padding: 12,
+    backgroundColor: '#ffebee',
+    borderRadius: 10, alignItems: 'center',
+  },
+  signOutTxt: { color: '#c62828', fontWeight: '700' },
   resetBtn: {
     margin: 16, padding: 14,
     backgroundColor: '#ffebee',

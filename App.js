@@ -3,11 +3,19 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text, View, LogBox, AppState } from 'react-native';
+import {
+  Text,
+  View,
+  LogBox,
+  AppState,
+  ActivityIndicator,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TravelProvider, useTravel } from './src/context/TravelContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import AuthScreen from './src/screens/AuthScreen';
 
 import MapScreen from './src/screens/MapScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -146,7 +154,9 @@ function MainTabs() {
 }
 
 function AppContent() {
+  // ВСІ ХУКИ - НА САМОМУ ВЕРХУ. Без ранніх return перед ними.
   const { pendingToast, hideToast } = useTravel();
+  const { user, loading: authLoading } = useAuth();
   const [locked, setLocked] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const appState = useRef(AppState.currentState);
@@ -179,17 +189,34 @@ function AppContent() {
     return () => sub.remove();
   }, []);
 
+  // Тепер тільки умовний рендер - усі хуки вже виконані вище.
+
+  // Поки перевіряємо чи є сесія
+  if (authLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#5f5df8" />
+      </View>
+    );
+  }
+
+  // Якщо не залогінений — показуємо екран авторизації
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  // Якщо біометрія увімкнена і застосунок заблокований
   if (locked && biometricEnabled) {
     return <LockScreen onUnlock={() => setLocked(false)} />;
   }
 
+  // Основний застосунок
   return (
     <View style={{ flex: 1 }}>
       <NavigationContainer
         ref={navigationRef}
         linking={linkingConfig}
         onReady={() => {
-          // Прив'язуємо deepLinkRouter до навігації, коли вона готова
           deepLinkRouter.setNavigation(navigationRef.current);
         }}
       >
@@ -216,9 +243,11 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <TravelProvider>
-          <AppContent />
-        </TravelProvider>
+        <AuthProvider>
+          <TravelProvider>
+            <AppContent />
+          </TravelProvider>
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,84 +1,158 @@
-import { apiClient } from './client';
-import { COUNTRIES } from '../data/countries';
+import { supabase } from './supabaseClient';
 
 /**
  * ============================================================
- * API для роботи з країнами (REST)
+ * API для роботи з країнами (Supabase + PostgreSQL)
  * ============================================================
  *
- * Базовий URL: https://api.travelmap.example
+ * Усі запити йдуть через @supabase/supabase-js, який під капотом
+ * робить HTTP-запити до Supabase REST API (PostgREST).
  *
- * Ендпоінти:
+ * Кожен користувач бачить ТІЛЬКИ свої дані завдяки RLS
+ * (Row Level Security), яку ми налаштували у SQL.
  *
- *  GET    /countries              → масив усіх країн (довідник)
- *  GET    /countries/:id          → одна країна за id
- *  GET    /users/me/visited       → масив відвіданих країн поточного користувача
- *  POST   /users/me/visited       → позначити країну як відвідану
- *                                   body: { countryId, name, date, note }
- *  DELETE /users/me/visited/:id   → прибрати позначку "відвідано"
- *  PUT    /users/me/visited/:id   → оновити нотатку/дату
- *                                   body: { date, note }
+ * Ендпоінти (під капотом це REST):
  *
- * Усі мережеві виклики зараз мокові (з затримкою 500ms).
+ *   GET    /rest/v1/countries?user_id=eq.<id>     → список країн користувача
+ *   GET    /rest/v1/countries?id=eq.<id>          → одна країна
+ *   POST   /rest/v1/countries                     → створити
+ *   PATCH  /rest/v1/countries?id=eq.<id>          → оновити
+ *   DELETE /rest/v1/countries?id=eq.<id>          → видалити
  */
 
-// ----- Довідник країн -----
+// ============================================================
+// READ
+// ============================================================
+
+/**
+ * Отримати всі країни поточного користувача.
+ * RLS автоматично фільтрує за user_id.
+ */
+export async function fetchVisitedCountries() {
+  const { data, error } = await supabase
+    .from('countries')
+    .select('*')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(toAppFormat);
+}
+
+/**
+ * Отримати одну країну за country_code.
+ */
+export async function fetchCountryByCode(countryCode) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('countries')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('country_code', countryCode)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? toAppFormat(data) : null;
+}
+
+// ============================================================
+// CREATE / UPDATE — UPSERT (одночасно створює або оновлює)
+// ============================================================
+
+/**
+ * Зберегти або оновити країну.
+ * upsert по (user_id, country_code) — якщо запис є, оновлюється; якщо ні — створюється.
+ */
+export async function upsertCountry(country) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const payload = {
+    user_id: user.id,
+    country_code: country.id, // у нашому застосунку id - це ISO-код
+    name: country.name,
+    continent: country.continent || '',
+    visited: !!country.visited,
+    is_dream: !!country.isDream,
+    date_visited: country.dateVisited
+      ? (country.dateVisited instanceof Date
+          ? country.dateVisited.toISOString()
+          : country.dateVisited)
+      : null,
+    note: country.note || '',
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('countries')
+    .upsert(payload, { onConflict: 'user_id,country_code' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return toAppFormat(data);
+}
+
+// ============================================================
+// DELETE
+// ============================================================
+
+export async function deleteCountry(countryCode) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('countries')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('country_code', countryCode);
+
+  if (error) throw error;
+  return true;
+}
+
+// ============================================================
+// LEGACY ALIASES — для сумісності з існуючими репозиторіями
+// ============================================================
 
 export async function fetchAllCountries() {
-  return apiClient.get('/countries', () => {
-    // Сервер би повернув такі ж дані, які у нас у COUNTRIES
-    return COUNTRIES.map((c) => ({
-      id: c.id,
-      name: c.name,
-      continent: c.continent,
-    }));
-  });
-}
-
-export async function fetchCountryById(id) {
-  return apiClient.get(`/countries/${id}`, () => {
-    const c = COUNTRIES.find((x) => x.id === id);
-    if (!c) throw new Error(`Country ${id} not found`);
-    return { id: c.id, name: c.name, continent: c.continent };
-  });
-}
-
-// ----- Відвідані країни поточного користувача -----
-
-export async function fetchVisitedCountries() {
-  // У справжньому сервері тут була б авторизація.
-  // Мок: повертаємо порожній список (сервер "нічого про нас не знає"
-  // — джерело істини для нас локальна БД, бо ми offline-first).
-  return apiClient.get('/users/me/visited', () => []);
+  return fetchVisitedCountries();
 }
 
 export async function postVisitedCountry(country) {
-  // Приймає екземпляр Country (або plain-об'єкт з тими ж полями).
-  return apiClient.post('/users/me/visited', {
-    countryId: country.id,
-    name: country.name,
-    date: country.dateVisited ? country.dateVisited.toISOString?.() : null,
-    note: country.note,
-  }, (body) => {
-    // Мок-відповідь: сервер "зберіг" і повертає об'єкт з syncStatus
-    return {
-      id: body.countryId,
-      name: body.name,
-      date: body.date,
-      note: body.note,
-      syncStatus: 'synced',
-    };
-  });
+  return upsertCountry(country);
 }
 
 export async function deleteVisitedCountry(id) {
-  return apiClient.delete(`/users/me/visited/${id}`, () => ({ success: true }));
+  return deleteCountry(id);
 }
 
 export async function putVisitedCountry(id, updates) {
-  return apiClient.put(`/users/me/visited/${id}`, updates, (body) => ({
-    id,
-    ...body,
-    syncStatus: 'synced',
-  }));
+  return upsertCountry({ id, ...updates });
+}
+
+export async function fetchCountryById(id) {
+  return fetchCountryByCode(id);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+/**
+ * Конвертація з формату Supabase (snake_case) у формат застосунку (camelCase).
+ */
+function toAppFormat(row) {
+  return {
+    id: row.country_code,           // у застосунку id = ISO-код
+    name: row.name,
+    continent: row.continent || '',
+    visited: !!row.visited,
+    isDream: !!row.is_dream,
+    dateVisited: row.date_visited ? new Date(row.date_visited) : null,
+    note: row.note || '',
+    syncStatus: 'synced',           // якщо прийшло з сервера — значить синхронізовано
+    _supabaseId: row.id,            // зберігаємо UUID на випадок якщо знадобиться
+  };
 }
