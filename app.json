@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Travel-app",
-    "slug": "travel-app",
+    "name": "Wish2Go",
+    "slug": "wish2go",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
