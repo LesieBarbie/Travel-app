@@ -4,16 +4,16 @@ import { sendAchievementNotification } from '../utils/notifications';
 import { ACHIEVEMENTS } from '../data/achievements';
 import CountryRepository from '../repositories/CountryRepository';
 import AchievementRepository from '../repositories/AchievementRepository';
+import { useAuth } from './AuthContext';
 
 const TravelContext = createContext(null);
 
 const countryRepo = new CountryRepository();
 const achievementRepo = new AchievementRepository();
-
-// Колбек викликається після фонової синхронізації — оновлює UI
 countryRepo.onSyncComplete = null;
 
 export function TravelProvider({ children }) {
+  const { user } = useAuth();
   const [visited, setVisited] = useState([]);
   const [dream, setDream] = useState([]);
   const [regions, setRegions] = useState({});
@@ -23,6 +23,9 @@ export function TravelProvider({ children }) {
   const [pendingToast, setPendingToast] = useState(null);
   const toastQueue = useRef([]);
 
+  // ============================================================
+  // Початкове завантаження (локалка) — один раз
+  // ============================================================
   useEffect(() => {
     (async () => {
       await migrateLegacyData();
@@ -36,6 +39,23 @@ export function TravelProvider({ children }) {
       setLoaded(true);
     })();
   }, []);
+
+  // ============================================================
+  // Pull з Supabase при логіні
+  // ============================================================
+  useEffect(() => {
+    if (!user || !loaded) return;
+    (async () => {
+      try {
+        await countryRepo.pullFromServer();
+        const all = await countryRepo.getAll();
+        setVisited(all.filter(c => c.visited).map(toLegacy));
+        setDream(all.filter(c => c.isDream).map(toLegacy));
+      } catch (e) {
+        console.warn('Pull from server failed:', e.message);
+      }
+    })();
+  }, [user, loaded]);
 
   useEffect(() => { if (loaded) saveData(KEYS.REGIONS, regions); }, [regions, loaded]);
   useEffect(() => { if (loaded) saveMeta(META_KEYS.NOTIFIED_ACHIEVEMENTS, notifiedAchievements); }, [notifiedAchievements, loaded]);
@@ -106,7 +126,6 @@ export function TravelProvider({ children }) {
   };
 
   const updateStateFromRepo = async () => {
-    // Підписуємось на фонову синхронізацію
     countryRepo.onSyncComplete = updateStateFromRepo;
     const all = await countryRepo.getAll();
     const newVisited = all.filter(c => c.visited).map(toLegacy);
@@ -153,13 +172,29 @@ export function TravelProvider({ children }) {
     await updateStateFromRepo();
   };
 
+  const resetAll = async () => {
+    const all = await countryRepo.getAll();
+    for (const c of all) {
+      await countryRepo.delete(c.id);
+    }
+    setVisited([]);
+    setDream([]);
+    setRegions({});
+    setNotifiedAchievements([]);
+    toastQueue.current = [];
+    setPendingToast(null);
+  };
+
   const syncPending = async () => {
     try {
       const result = await countryRepo.syncPending();
-      await updateStateFromRepo(); // оновлюємо UI після синхронізації
+      // Після push - ще раз pull, щоб підхопити можливі зміни з інших пристроїв
+      await countryRepo.pullFromServer();
+      await updateStateFromRepo();
       return result;
     } catch (e) {
       console.warn('syncPending error:', e.message);
+      return { synced: 0, failed: 0 };
     }
   };
 
@@ -169,7 +204,7 @@ export function TravelProvider({ children }) {
       pendingToast, hideToast,
       toggleVisited, toggleDream, updateNote,
       toggleRegion, updateRegionNote, addRegionPhoto, removeRegionPhoto,
-      addCountryPhoto, removeCountryPhoto,
+      addCountryPhoto, removeCountryPhoto, resetAll,
       syncPending,
     }}>
       {children}
@@ -189,7 +224,7 @@ function toLegacy(country) {
     name: country.name,
     note: country.note || '',
     photos: country.photos || [],
-    ...(country.visited && country.dateVisited ? { date: country.dateVisited.toISOString() } : {}),
+    ...(country.visited && country.dateVisited ? { date: country.dateVisited.toISOString ? country.dateVisited.toISOString() : country.dateVisited } : {}),
   };
 }
 

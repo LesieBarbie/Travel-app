@@ -4,7 +4,7 @@ import * as countriesApi from '../api/countriesApi';
 
 /**
  * ============================================================
- * CountryRepository
+ * CountryRepository (Offline-first з реальним Supabase API)
  * ============================================================
  *
  * Реалізує патерн Repository: єдина точка доступу до даних про країни.
@@ -15,19 +15,20 @@ import * as countriesApi from '../api/countriesApi';
  * ------------------------
  * - UI завжди читає з локального сховища → миттєва відповідь, працює без інтернету.
  * - Зміни спочатку зберігаються локально з syncStatus='pending'.
- * - Паралельно запускаються фонові запити до API.
+ * - Паралельно запускаються фонові запити до Supabase.
  * - При успіху сервера — оновлюємо локальний запис з syncStatus='synced'.
  * - При помилці — syncStatus='error', запис залишається у черзі на пізніше.
  *
  * Залежності:
  *  - storage: утиліти з 4 CRUD операціями (getList, getItem, saveItem, deleteItem)
- *  - api:     модуль мережевих викликів (countriesApi)
+ *  - api:     модуль мережевих викликів (countriesApi → Supabase)
  */
 export default class CountryRepository {
   constructor(storageModule = storage, apiModule = countriesApi) {
     this.storage = storageModule;
     this.api = apiModule;
     this.collection = storage.COLLECTIONS.COUNTRIES;
+    this.onSyncComplete = null;
   }
 
   // ==========================================================
@@ -53,7 +54,10 @@ export default class CountryRepository {
     if (!(country instanceof Country)) {
       country = Country.fromJSON(country);
     }
+    // Спочатку зберігаємо локально (offline-first)
+    country.syncStatus = 'pending';
     await this.storage.saveItem(this.collection, country.toJSON());
+
     // Відразу запускаємо синхронізацію (не блокуємо UI)
     this.syncCountry(country).catch((e) =>
       console.warn('Background sync failed', country.id, e.message)
@@ -74,7 +78,7 @@ export default class CountryRepository {
   }
 
   // ==========================================================
-  // СИНХРОНІЗАЦІЯ З API
+  // СИНХРОНІЗАЦІЯ З SUPABASE
   // ==========================================================
 
   /**
@@ -93,7 +97,7 @@ export default class CountryRepository {
         photos: Array.isArray(country.photos) ? country.photos : [],
         dateVisited: country.dateVisited instanceof Date ? country.dateVisited : null,
       };
-      const response = await this.api.postVisitedCountry(safeCountry);
+      const response = await this.api.upsertCountry(safeCountry);
 
       // Сервер підтвердив → оновлюємо syncStatus локально
       const updated = await this.getById(country.id);
@@ -118,34 +122,51 @@ export default class CountryRepository {
   }
 
   /**
-   * Головний сценарій Offline-first:
-   * повернути локальні дані одразу, а потім оновити їх з сервера у фоні.
-   *
-   * @param {function} onRemoteUpdate - колбек, який викликається коли дані з сервера
-   *   прийшли. UI може підписатися і оновити стан.
+   * Pull-синхронізація: тягне всі країни з Supabase і кладе у локалку.
+   * Викликається після логіну з нового пристрою.
+   */
+  async pullFromServer() {
+    try {
+      const remote = await this.api.fetchVisitedCountries();
+      if (!Array.isArray(remote)) return { synced: 0 };
+
+      let count = 0;
+      for (const remoteItem of remote) {
+        if (!remoteItem || !remoteItem.id) continue;
+
+        // Зберігаємо в локалку як synced
+        const existing = await this.storage.getItem(this.collection, remoteItem.id);
+        const merged = {
+          ...(existing || {}),
+          ...remoteItem,
+          // Зберігаємо локальні фото — вони не йдуть на сервер у цій версії
+          photos: existing?.photos || remoteItem.photos || [],
+          syncStatus: 'synced',
+        };
+        await this.storage.saveItem(this.collection, merged);
+        count++;
+      }
+      this.onSyncComplete?.();
+      return { synced: count };
+    } catch (e) {
+      console.warn('pullFromServer failed:', e.message);
+      throw e;
+    }
+  }
+
+  /**
+   * Старий метод getAllWithBackgroundSync — залишений для сумісності.
+   * Тепер просто читає локалку і викликає pullFromServer у фоні.
    */
   async getAllWithBackgroundSync(onRemoteUpdate) {
     // 1. Одразу повертаємо локальне
     const local = await this.getAll();
 
-    // 2. У фоні тягнемо з сервера і мержимо
-    this.api.fetchVisitedCountries()
-      .then(async (remote) => {
-        // Для простоти: якщо сервер повернув більше записів - додаємо їх локально
-        // (у реальному житті тут була б складніша логіка merge)
-        if (Array.isArray(remote) && remote.length > 0) {
-          for (const remoteItem of remote) {
-            const existing = await this.storage.getItem(this.collection, remoteItem.id);
-            if (!existing) {
-              await this.storage.saveItem(this.collection, {
-                ...remoteItem,
-                syncStatus: 'synced',
-              });
-            }
-          }
-          const updated = await this.getAll();
-          onRemoteUpdate?.(updated);
-        }
+    // 2. У фоні тягнемо з сервера
+    this.pullFromServer()
+      .then(async () => {
+        const updated = await this.getAll();
+        onRemoteUpdate?.(updated);
       })
       .catch((e) => {
         console.warn('Background fetch failed:', e.message);
@@ -157,7 +178,7 @@ export default class CountryRepository {
 
   /**
    * Синхронізувати всі 'pending' / 'error' записи з сервером.
-   * Викликається при появі мережі.
+   * Викликається при появі мережі або з кнопки "Синхронізувати зараз".
    */
   async syncPending() {
     const all = await this.getAll();
