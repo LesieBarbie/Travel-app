@@ -18,10 +18,15 @@ import RegionDetailScreen from './src/screens/RegionDetailScreen';
 import LockScreen from './src/screens/LockScreen';
 import SecuritySettingsScreen from './src/screens/SecuritySettingsScreen';
 import LiveFeedScreen from './src/screens/LiveFeedScreen';
+import InviteScreen from './src/screens/InviteScreen';
+import DebugScreen from './src/screens/DebugScreen';
 
 import AchievementToast from './src/components/AchievementToast';
 import { requestNotificationPermissions } from './src/utils/notifications';
 import { biometricManager } from './src/utils/BiometricManager';
+
+import { linkingConfig } from './src/navigation/linkingConfig';
+import DeepLinkRouter from './src/navigation/DeepLinkRouter';
 
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
@@ -29,8 +34,12 @@ LogBox.ignoreLogs([
 ]);
 
 const Tab = createBottomTabNavigator();
+const RootStack = createNativeStackNavigator();
 const MapStackNav = createNativeStackNavigator();
 const ListStackNav = createNativeStackNavigator();
+
+// Глобальний роутер, доступний усьому застосунку
+export const deepLinkRouter = new DeepLinkRouter();
 
 function MapStack() {
   return (
@@ -88,12 +97,61 @@ function tabIcon(emoji) {
   return () => <Text style={{ fontSize: 22 }}>{emoji}</Text>;
 }
 
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: '#2e7d32',
+        tabBarLabelStyle: { fontSize: 11 },
+      }}
+    >
+      <Tab.Screen
+        name="Map"
+        component={MapStack}
+        options={{ title: 'Мапа', tabBarIcon: tabIcon('🗺️') }}
+      />
+      <Tab.Screen
+        name="List"
+        component={ListStack}
+        options={{ title: 'Список', tabBarIcon: tabIcon('📋') }}
+      />
+      <Tab.Screen
+        name="Achievements"
+        component={AchievementsScreen}
+        options={{ title: 'Досягнення', tabBarIcon: tabIcon('🏆') }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: 'Профіль', tabBarIcon: tabIcon('👤') }}
+      />
+      <Tab.Screen
+        name="Security"
+        component={SecuritySettingsScreen}
+        options={{ title: 'Безпека', tabBarIcon: tabIcon('🔒') }}
+      />
+      <Tab.Screen
+        name="Live"
+        component={LiveFeedScreen}
+        options={{ title: 'Стрічка', tabBarIcon: tabIcon('📡') }}
+      />
+      <Tab.Screen
+        name="Debug"
+        component={DebugScreen}
+        options={{ title: 'Debug', tabBarIcon: tabIcon('🛠️') }}
+      />
+    </Tab.Navigator>
+  );
+}
+
 function AppContent() {
   const { pendingToast, hideToast } = useTravel();
   const [locked, setLocked] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const appState = useRef(AppState.currentState);
   const bgTimer = useRef(null);
+  const navigationRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -109,7 +167,7 @@ function AppContent() {
       if (next === 'active' && bgTimer.current) {
         const secs = (Date.now() - bgTimer.current) / 1000;
         if (secs > 30) {
-          biometricManager.isEnabledByUser().then(en => {
+          biometricManager.isEnabledByUser().then((en) => {
             if (en) setLocked(true);
           });
         }
@@ -127,45 +185,22 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={{
-            headerShown: false,
-            tabBarActiveTintColor: '#2e7d32',
-            tabBarLabelStyle: { fontSize: 11 },
-          }}
-        >
-          <Tab.Screen
-            name="Map"
-            component={MapStack}
-            options={{ title: 'Мапа', tabBarIcon: tabIcon('🗺️') }}
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linkingConfig}
+        onReady={() => {
+          // Прив'язуємо deepLinkRouter до навігації, коли вона готова
+          deepLinkRouter.setNavigation(navigationRef.current);
+        }}
+      >
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="Main" component={MainTabs} />
+          <RootStack.Screen
+            name="Invite"
+            component={InviteScreen}
+            options={{ headerShown: true, title: 'Запрошення' }}
           />
-          <Tab.Screen
-            name="List"
-            component={ListStack}
-            options={{ title: 'Список', tabBarIcon: tabIcon('📋') }}
-          />
-          <Tab.Screen
-            name="Achievements"
-            component={AchievementsScreen}
-            options={{ title: 'Досягнення', tabBarIcon: tabIcon('🏆') }}
-          />
-          <Tab.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={{ title: 'Профіль', tabBarIcon: tabIcon('👤') }}
-          />
-          <Tab.Screen
-            name="Security"
-            component={SecuritySettingsScreen}
-            options={{ title: 'Безпека', tabBarIcon: tabIcon('🔒') }}
-          />
-          <Tab.Screen
-            name="Live"
-            component={LiveFeedScreen}
-            options={{ title: 'Стрічка', tabBarIcon: tabIcon('📡') }}
-          />
-        </Tab.Navigator>
+        </RootStack.Navigator>
       </NavigationContainer>
       <AchievementToast achievement={pendingToast} onHide={hideToast} />
       <StatusBar style="auto" />

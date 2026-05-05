@@ -3,13 +3,14 @@ import React, { useMemo, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
- StyleSheet,
+  StyleSheet,
   ScrollView,
   TextInput,
   TouchableOpacity,
   Image,
   Alert,
   Modal,
+  Share,
 } from 'react-native';
 
 import * as ImagePicker from 'expo-image-picker';
@@ -25,7 +26,6 @@ export default function CountryDetailScreen({ route, navigation }) {
   const { countryId, name } = route.params;
 
   const config = COUNTRIES_WITH_REGIONS[countryId];
-
 
   const {
     regions,
@@ -71,56 +71,58 @@ export default function CountryDetailScreen({ route, navigation }) {
   const [localNote, setLocalNote] = useState(country.note || '');
   const debounceTimer = useRef(null);
 
-  const handleNoteChange = useCallback((text) => {
-    setLocalNote(text);
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      updateNote(country.visited ? 'visited' : 'dream', countryId, text);
-    }, 600);
-  }, [country.visited, countryId, updateNote]);
+  const handleNoteChange = useCallback(
+    (text) => {
+      setLocalNote(text);
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      debounceTimer.current = setTimeout(() => {
+        updateNote(country.visited ? 'visited' : 'dream', countryId, text);
+      }, 600);
+    },
+    [country.visited, countryId, updateNote]
+  );
 
   // =========================
   // 📸 PICK IMAGE
   // =========================
-const pickImage = async () => {
-  try {
-    const permission =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const pickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (!permission.granted) {
-      Alert.alert('Немає доступу');
-      return;
-    }
-
-    if (!country.visited && !country.isDream) {
-      Alert.alert('Спочатку додай країну');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-
-    if (!result.canceled && result.assets?.length > 0) {
-      const originalUri = result.assets[0].uri;
-
-      const dir = new Directory(Paths.document, 'photos');
-      if (!dir.exists) {
-        dir.create();
+      if (!permission.granted) {
+        Alert.alert('Немає доступу');
+        return;
       }
 
-      const dest = new File(dir, Date.now() + '.jpg');
-      const src = new File(originalUri);
-      src.copy(dest);
+      if (!country.visited && !country.isDream) {
+        Alert.alert('Спочатку додай країну');
+        return;
+      }
 
-      addCountryPhoto(countryId, dest.uri);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const originalUri = result.assets[0].uri;
+
+        const dir = new Directory(Paths.document, 'photos');
+        if (!dir.exists) {
+          dir.create();
+        }
+
+        const dest = new File(dir, Date.now() + '.jpg');
+        const src = new File(originalUri);
+        src.copy(dest);
+
+        addCountryPhoto(countryId, dest.uri);
+      }
+    } catch (e) {
+      console.log(e);
+      Alert.alert('Помилка', 'Не вдалося обрати фото');
     }
-  } catch (e) {
-    console.log(e);
-    Alert.alert('Помилка', 'Не вдалося обрати фото');
-  }
-};
+  };
 
   const handleDelete = (uri) => {
     Alert.alert('Видалити фото?', 'Цю дію не можна скасувати', [
@@ -128,14 +130,25 @@ const pickImage = async () => {
       {
         text: 'Видалити',
         style: 'destructive',
-        onPress: () =>
-          removeCountryPhoto(countryId, uri)
+        onPress: () => removeCountryPhoto(countryId, uri),
       },
     ]);
   };
 
   // =========================
-  console.log('COUNTRY PHOTOS:', photos);
+  // 📤 SHARE COUNTRY (Deep Link)
+  // =========================
+  const handleShare = async () => {
+    try {
+      const url = `travelmap://country/${countryId}`;
+      await Share.share({
+        message: `${country.name} — поглянь у Travel Wish Map: ${url}`,
+        url,
+      });
+    } catch (e) {
+      Alert.alert('Помилка', e.message);
+    }
+  };
 
   return (
     <>
@@ -155,6 +168,11 @@ const pickImage = async () => {
             </Text>
           )}
         </View>
+
+        {/* SHARE BUTTON */}
+        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+          <Text style={styles.shareTxt}>📤 Поділитись країною</Text>
+        </TouchableOpacity>
 
         {/* MAP */}
         {config && (
@@ -326,13 +344,13 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-photo: {
-  width: '100%',
-  height: 220,
-  borderRadius: 10,
-  resizeMode: 'contain',
-  backgroundColor: '#000',
-},
+  photo: {
+    width: '100%',
+    height: 220,
+    borderRadius: 10,
+    resizeMode: 'contain',
+    backgroundColor: '#000',
+  },
 
   deleteBtn: {
     position: 'absolute',
@@ -373,4 +391,16 @@ photo: {
     right: 20,
     zIndex: 10,
   },
+
+  // === Deep Link Share ===
+  shareBtn: {
+    alignSelf: 'center',
+    backgroundColor: '#5f5df8',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+
+  shareTxt: { color: '#fff', fontWeight: '700' },
 });
