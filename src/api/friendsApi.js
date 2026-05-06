@@ -1,10 +1,7 @@
 /**
- * src/api/friendsApi.js  ← ЗАМЕНИТЬ
+ * src/api/friendsApi.js
  *
- * Виправлено:
- * 1. Прибрані JOIN через FK (Supabase не бачить зв'язку без міграції)
- *    — замість цього робимо два окремих запити і з'єднуємо вручну
- * 2. Інвайт-посилання генерується у форматі Expo Go tunnel
+ * Додано: removeFriend(friendshipId)
  */
 
 import { supabase } from './supabaseClient';
@@ -49,7 +46,6 @@ async function fetchProfilesByIds(ids) {
 
 // ─── Друзі ──────────────────────────────────────────────────
 
-/** Список прийнятих друзів */
 export async function getFriends() {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -78,7 +74,6 @@ export async function getFriends() {
   });
 }
 
-/** Вхідні запити (я — friend_id, статус pending) */
 export async function getPendingRequests() {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -104,7 +99,6 @@ export async function getPendingRequests() {
   }));
 }
 
-/** Прийняти запит */
 export async function acceptFriendRequest(friendshipId) {
   const { error } = await supabase
     .from('friendships')
@@ -113,8 +107,16 @@ export async function acceptFriendRequest(friendshipId) {
   if (error) throw error;
 }
 
-/** Відхилити / видалити */
 export async function declineFriendRequest(friendshipId) {
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    .eq('id', friendshipId);
+  if (error) throw error;
+}
+
+/** Видалити друга (видаляємо рядок дружби) */
+export async function removeFriend(friendshipId) {
   const { error } = await supabase
     .from('friendships')
     .delete()
@@ -124,12 +126,6 @@ export async function declineFriendRequest(friendshipId) {
 
 // ─── Інвайти ────────────────────────────────────────────────
 
-/**
- * Генерує токен і повертає посилання яке працює в Expo Go.
- * Expo Go не відкриває кастомну схему travelmap:// через Share —
- * тому використовуємо Linking.createURL() який повертає
- * правильний exp://... URL для поточного середовища.
- */
 export async function createInviteToken() {
   const { data: { user } } = await supabase.auth.getUser();
   const token = nanoid(10).toUpperCase();
@@ -140,14 +136,10 @@ export async function createInviteToken() {
 
   if (error) throw error;
 
-  // В Expo Go: exp://owsxozu-lesiebarbie-8081.exp.direct/--/invite/TOKEN
-  // В production build: travelmap://invite/TOKEN
   const link = Linking.createURL(`invite/${token}`);
-
   return { token, link };
 }
 
-/** Прийняти інвайт за токеном */
 export async function acceptInviteToken(token) {
   const { data: { user } } = await supabase.auth.getUser();
 

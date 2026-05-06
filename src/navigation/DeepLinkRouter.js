@@ -1,31 +1,5 @@
 import * as Linking from 'expo-linking';
 
-/**
- * ============================================================
- * DeepLinkRouter
- * ============================================================
- *
- * Розбирає вхідні URL і виконує навігацію застосунку.
- *
- * Підтримує дві схеми:
- *   - travelmap://...           (кастомна URI-схема)
- *   - https://travelmap.app/... (Universal Links / App Links)
- *
- * Маршрути (Destinations):
- *   - Home                          - головна
- *   - Country(id)                   - деталі країни
- *   - Region(countryId, name)       - деталі регіону
- *   - Catalog(filter)               - список з фільтром (all/visited/dream)
- *   - Invite(token)                 - запрошення друга
- *   - Achievements                  - досягнення
- *
- * Невідомі URL не кидають exception — повертають null.
- */
-
-// ============================================================
-// Типи маршрутів
-// ============================================================
-
 export const DestinationType = Object.freeze({
   HOME: 'home',
   COUNTRY: 'country',
@@ -33,12 +7,11 @@ export const DestinationType = Object.freeze({
   CATALOG: 'catalog',
   INVITE: 'invite',
   ACHIEVEMENTS: 'achievements',
+  FRIENDS: 'friends',
+  LIVE_FEED: 'live',
+  PROFILE: 'profile',
 });
 
-/**
- * Створення типізованих маршрутів. Замість sealed class / enum
- * використовуємо звичайні об'єкти з полем `type`.
- */
 export const Destination = {
   Home: () => ({ type: DestinationType.HOME }),
   Country: (id) => ({ type: DestinationType.COUNTRY, id }),
@@ -46,26 +19,19 @@ export const Destination = {
   Catalog: (filter = null) => ({ type: DestinationType.CATALOG, filter }),
   Invite: (token) => ({ type: DestinationType.INVITE, token }),
   Achievements: () => ({ type: DestinationType.ACHIEVEMENTS }),
+  Friends: () => ({ type: DestinationType.FRIENDS }),
+  LiveFeed: () => ({ type: DestinationType.LIVE_FEED }),
+  Profile: () => ({ type: DestinationType.PROFILE }),
 };
 
-// ============================================================
-// DeepLinkRouter
-// ============================================================
-
 export default class DeepLinkRouter {
-  /**
-   * @param {object} navigation - об'єкт NavigationContainer (передається з App)
-   */
   constructor(navigation = null) {
     this.navigation = navigation;
     this.currentDestination = null;
-    this.pendingDestination = null; // якщо navigation ще не готова
-    this.listeners = []; // підписники на зміни currentDestination
+    this.pendingDestination = null;
+    this.listeners = [];
   }
 
-  /**
-   * Прив'язати об'єкт навігації пізніше (коли NavigationContainer готовий).
-   */
   setNavigation(navigation) {
     this.navigation = navigation;
     if (this.pendingDestination) {
@@ -74,23 +40,6 @@ export default class DeepLinkRouter {
     }
   }
 
-  /**
-   * Парсить URL у типізований маршрут.
-   *
-   * Правила:
-   *  - travelmap://... та https://travelmap.app/... обробляються однаково
-   *  - travelmap://home → Home
-   *  - travelmap://country/276 → Country("276")
-   *  - travelmap://country/276/region/Bayern → Region("276", "Bayern")
-   *  - travelmap://catalog?filter=visited → Catalog("visited")
-   *  - travelmap://catalog → Catalog(null)
-   *  - travelmap://invite/ABC123 → Invite("ABC123")
-   *  - travelmap://achievements → Achievements
-   *  - все інше → null
-   *
-   * @param {string} url
-   * @returns {object|null}
-   */
   parseURL(url) {
     if (!url || typeof url !== 'string') return null;
 
@@ -102,25 +51,13 @@ export default class DeepLinkRouter {
       return null;
     }
 
-    // expo-linking повертає { scheme, hostname, path, queryParams }
-    // Але для travelmap://country/276:
-    //   scheme=travelmap, hostname=country, path=276
-    // Для https://travelmap.app/country/276:
-    //   scheme=https, hostname=travelmap.app, path=country/276
-    //
-    // Об'єднуємо hostname та path, щоб отримати єдиний шлях,
-    // не залежний від схеми.
-
     const isHttps = parsed.scheme === 'https';
     let segments;
 
     if (isHttps) {
-      // https://travelmap.app/country/276 → ['country', '276']
       const pathStr = parsed.path || '';
       segments = pathStr.split('/').filter(Boolean);
     } else {
-      // travelmap://country/276 → hostname='country', path='276'
-      // Об'єднуємо: ['country', '276']
       segments = [];
       if (parsed.hostname) segments.push(parsed.hostname);
       if (parsed.path) {
@@ -135,44 +72,32 @@ export default class DeepLinkRouter {
     const [first, second, third, fourth] = segments;
 
     try {
-      // home
-      if (first === 'home') {
-        return Destination.Home();
-      }
+      if (first === 'home') return Destination.Home();
 
-      // country/:id
-      if (first === 'country' && second && segments.length === 2) {
+      if (first === 'country' && second && segments.length === 2)
         return Destination.Country(second);
-      }
 
-      // country/:id/region/:name
-      if (
-        first === 'country' &&
-        second &&
-        third === 'region' &&
-        fourth &&
-        segments.length === 4
-      ) {
+      if (first === 'country' && second && third === 'region' && fourth && segments.length === 4)
         return Destination.Region(second, decodeURIComponent(fourth));
-      }
 
-      // catalog?filter=...
-      if (first === 'catalog' && segments.length === 1) {
-        const filter = queryParams.filter || null;
-        return Destination.Catalog(filter);
-      }
+      if (first === 'catalog' && segments.length === 1)
+        return Destination.Catalog(queryParams.filter || null);
 
-      // invite/:token
-      if (first === 'invite' && second && segments.length === 2) {
+      if (first === 'invite' && second && segments.length === 2)
         return Destination.Invite(second);
-      }
 
-      // achievements
-      if (first === 'achievements' && segments.length === 1) {
+      if (first === 'achievements' && segments.length === 1)
         return Destination.Achievements();
-      }
 
-      // Невідомий маршрут
+      if (first === 'friends' && segments.length === 1)
+        return Destination.Friends();
+
+      if (first === 'live' && segments.length === 1)
+        return Destination.LiveFeed();
+
+      if (first === 'profile' && segments.length === 1)
+        return Destination.Profile();
+
       return null;
     } catch (e) {
       console.warn('[DeepLinkRouter] parseURL error:', e.message);
@@ -180,12 +105,6 @@ export default class DeepLinkRouter {
     }
   }
 
-  /**
-   * Точка входу: парсить URL і виконує навігацію.
-   *
-   * @param {string} url
-   * @returns {boolean} true якщо вдалось обробити, false якщо URL невалідний
-   */
   handle(url) {
     const destination = this.parseURL(url);
     if (!destination) {
@@ -196,58 +115,77 @@ export default class DeepLinkRouter {
     return true;
   }
 
-  /**
-   * Виконує навігацію за типізованим маршрутом.
-   * Якщо NavigationContainer ще не готова — зберігає у pendingDestination.
-   */
   navigate(destination) {
     if (!destination) return;
 
-    // Зберігаємо поточний стан (для тестів і UI)
     this.currentDestination = destination;
     this._notifyListeners();
 
-    // Якщо ще немає об'єкта навігації — відкладемо
     if (!this.navigation) {
       this.pendingDestination = destination;
       return;
     }
 
-    // Виконуємо реальну навігацію
     try {
       switch (destination.type) {
         case DestinationType.HOME:
-          this.navigation.navigate('Map');
+          this.navigation.navigate('Main', { screen: 'Map' });
           break;
 
         case DestinationType.COUNTRY:
-          this.navigation.navigate('Map', {
-            screen: 'CountryDetail',
-            params: { countryId: destination.id, name: '' },
+          this.navigation.navigate('Main', {
+            screen: 'Map',
+            params: {
+              screen: 'CountryDetail',
+              params: { countryId: destination.id, name: '' },
+            },
           });
           break;
 
         case DestinationType.REGION:
-          this.navigation.navigate('Map', {
-            screen: 'RegionDetail',
-            params: { countryId: destination.countryId, regionName: destination.name },
+          this.navigation.navigate('Main', {
+            screen: 'Map',
+            params: {
+              screen: 'RegionDetail',
+              params: { countryId: destination.countryId, regionName: destination.name },
+            },
           });
           break;
 
         case DestinationType.CATALOG:
-          this.navigation.navigate('List', {
-            screen: 'CountriesList',
-            params: { initialFilter: destination.filter },
+          this.navigation.navigate('Main', {
+            screen: 'List',
+            params: {
+              screen: 'CountriesList',
+              params: { initialFilter: destination.filter },
+            },
           });
           break;
 
-        case DestinationType.INVITE:
-          // InviteScreen — це окремий стек, додамо у App.js
-          this.navigation.navigate('Invite', { token: destination.token });
+        case DestinationType.ACHIEVEMENTS:
+          this.navigation.navigate('Main', { screen: 'Achievements' });
           break;
 
-        case DestinationType.ACHIEVEMENTS:
-          this.navigation.navigate('Achievements');
+        case DestinationType.FRIENDS:
+          this.navigation.navigate('Main', {
+            screen: 'Friends',
+            params: { screen: 'FriendsList' },
+          });
+          break;
+
+        case DestinationType.LIVE_FEED:
+          this.navigation.navigate('Main', {
+            screen: 'Friends',
+            params: { screen: 'LiveFeed' },
+          });
+          break;
+
+        case DestinationType.PROFILE:
+          this.navigation.navigate('Main', { screen: 'Profile' });
+          break;
+
+        case DestinationType.INVITE:
+          this.navigation.navigate('Invite', { token: destination.token });
           break;
 
         default:
@@ -258,9 +196,6 @@ export default class DeepLinkRouter {
     }
   }
 
-  /**
-   * Підписка на зміни поточного маршруту.
-   */
   subscribe(listener) {
     this.listeners.push(listener);
     return () => {
@@ -270,59 +205,35 @@ export default class DeepLinkRouter {
 
   _notifyListeners() {
     for (const l of this.listeners) {
-      try {
-        l(this.currentDestination);
-      } catch {}
+      try { l(this.currentDestination); } catch {}
     }
   }
 
-  /**
-   * Створити URL для шерингу — обернений процес parseURL.
-   */
   static buildURL(destination, useHttps = false) {
     const base = useHttps ? 'https://travelmap.app' : 'travelmap:/';
-
     switch (destination.type) {
-      case DestinationType.HOME:
-        return `${base}/home`;
-      case DestinationType.COUNTRY:
-        return `${base}/country/${destination.id}`;
-      case DestinationType.REGION:
-        return `${base}/country/${destination.countryId}/region/${encodeURIComponent(destination.name)}`;
-      case DestinationType.CATALOG:
-        return destination.filter
-          ? `${base}/catalog?filter=${destination.filter}`
-          : `${base}/catalog`;
-      case DestinationType.INVITE:
-        return `${base}/invite/${destination.token}`;
-      case DestinationType.ACHIEVEMENTS:
-        return `${base}/achievements`;
-      default:
-        return null;
+      case DestinationType.HOME:         return `${base}/home`;
+      case DestinationType.COUNTRY:      return `${base}/country/${destination.id}`;
+      case DestinationType.REGION:       return `${base}/country/${destination.countryId}/region/${encodeURIComponent(destination.name)}`;
+      case DestinationType.CATALOG:      return destination.filter ? `${base}/catalog?filter=${destination.filter}` : `${base}/catalog`;
+      case DestinationType.INVITE:       return `${base}/invite/${destination.token}`;
+      case DestinationType.ACHIEVEMENTS: return `${base}/achievements`;
+      case DestinationType.FRIENDS:      return `${base}/friends`;
+      case DestinationType.LIVE_FEED:    return `${base}/live`;
+      case DestinationType.PROFILE:      return `${base}/profile`;
+      default: return null;
     }
   }
 }
 
-// ============================================================
-// Mock-версія для DebugScreen
-// ============================================================
-
-/**
- * MockDeepLinkRouter — для тестування через DebugScreen.
- * Делегує реальному роутеру, але дає змогу простіше підмінити поведінку у тестах.
- */
 export class MockDeepLinkRouter {
   constructor(realRouter) {
     this.realRouter = realRouter;
     this.handledUrls = [];
   }
-
   handle(url) {
     this.handledUrls.push(url);
     return this.realRouter.handle(url);
   }
-
-  reset() {
-    this.handledUrls = [];
-  }
+  reset() { this.handledUrls = []; }
 }

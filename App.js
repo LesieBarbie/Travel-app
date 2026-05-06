@@ -24,10 +24,11 @@ import CountryDetailScreen from './src/screens/CountryDetailScreen';
 import CountriesListScreen from './src/screens/CountriesListScreen';
 import RegionDetailScreen from './src/screens/RegionDetailScreen';
 import LockScreen from './src/screens/LockScreen';
-import SecuritySettingsScreen from './src/screens/SecuritySettingsScreen';
 import LiveFeedScreen from './src/screens/LiveFeedScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import DebugScreen from './src/screens/DebugScreen';
+import FriendsScreen from './src/screens/FriendsScreen';
+import FriendProfileScreen from './src/screens/FriendProfileScreen';
 
 import AchievementToast from './src/components/AchievementToast';
 import { requestNotificationPermissions } from './src/utils/notifications';
@@ -35,8 +36,6 @@ import { biometricManager } from './src/utils/BiometricManager';
 
 import { linkingConfig } from './src/navigation/linkingConfig';
 import DeepLinkRouter from './src/navigation/DeepLinkRouter';
-
-import FriendsScreen from './src/screens/FriendsScreen';
 
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
@@ -47,8 +46,8 @@ const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
 const MapStackNav = createNativeStackNavigator();
 const ListStackNav = createNativeStackNavigator();
+const FriendsStackNav = createNativeStackNavigator();
 
-// Глобальний роутер, доступний усьому застосунку
 export const deepLinkRouter = new DeepLinkRouter();
 
 function MapStack() {
@@ -103,6 +102,29 @@ function ListStack() {
   );
 }
 
+// Стек для вкладки Друзі: список → стрічка → профіль друга
+function FriendsStack() {
+  return (
+    <FriendsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <FriendsStackNav.Screen name="FriendsList" component={FriendsScreen} />
+      <FriendsStackNav.Screen
+        name="LiveFeed"
+        component={LiveFeedScreen}
+        options={{ headerShown: true, title: 'Стрічка друзів', headerBackTitle: 'Назад' }}
+      />
+      <FriendsStackNav.Screen
+        name="FriendProfile"
+        component={FriendProfileScreen}
+        options={({ route }) => ({
+          headerShown: true,
+          title: route.params?.username || 'Профіль',
+          headerBackTitle: 'Назад',
+        })}
+      />
+    </FriendsStackNav.Navigator>
+  );
+}
+
 function tabIcon(emoji) {
   return () => <Text style={{ fontSize: 22 }}>{emoji}</Text>;
 }
@@ -132,36 +154,20 @@ function MainTabs() {
         options={{ title: 'Досягнення', tabBarIcon: tabIcon('🏆') }}
       />
       <Tab.Screen
+        name="Friends"
+        component={FriendsStack}
+        options={{ title: 'Друзі', tabBarIcon: tabIcon('👥') }}
+      />
+      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{ title: 'Профіль', tabBarIcon: tabIcon('👤') }}
-      />
-      <Tab.Screen
-        name="Security"
-        component={SecuritySettingsScreen}
-        options={{ title: 'Безпека', tabBarIcon: tabIcon('🔒') }}
-      />
-      <Tab.Screen
-        name="Live"
-        component={LiveFeedScreen}
-        options={{ title: 'Стрічка', tabBarIcon: tabIcon('📡') }}
-      />
-      <Tab.Screen
-        name="Debug"
-        component={DebugScreen}
-        options={{ title: 'Debug', tabBarIcon: tabIcon('🛠️') }}
-      />
-      <Tab.Screen
-        name="Friends"
-        component={FriendsScreen}
-        options={{ title: 'Друзі', tabBarIcon: tabIcon('👥') }}
       />
     </Tab.Navigator>
   );
 }
 
 function AppContent() {
-  // ВСІ ХУКИ - НА САМОМУ ВЕРХУ. Без ранніх return перед ними.
   const { pendingToast, hideToast } = useTravel();
   const { user, loading: authLoading } = useAuth();
   const [locked, setLocked] = useState(true);
@@ -196,9 +202,6 @@ function AppContent() {
     return () => sub.remove();
   }, []);
 
-  // Тепер тільки умовний рендер - усі хуки вже виконані вище.
-
-  // Поки перевіряємо чи є сесія
   if (authLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -207,17 +210,12 @@ function AppContent() {
     );
   }
 
-  // Якщо не залогінений — показуємо екран авторизації
-  if (!user) {
-    return <AuthScreen />;
-  }
+  if (!user) return <AuthScreen />;
 
-  // Якщо біометрія увімкнена і застосунок заблокований
   if (locked && biometricEnabled) {
     return <LockScreen onUnlock={() => setLocked(false)} />;
   }
 
-  // Основний застосунок
   return (
     <View style={{ flex: 1 }}>
       <NavigationContainer
