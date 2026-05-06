@@ -2,11 +2,6 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
-
-/**
- * Toast-сповіщення про ачівку, яке з'являється зверху екрану.
- * Показуємо 3 секунди, потім автоматично ховається.
- */
 export default function AchievementToast({ achievement, onHide }) {
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;

@@ -2,12 +2,6 @@ import UserProfile from '../models/UserProfile';
 import * as storage from '../utils/storage';
 import * as profileApi from '../api/profileApi';
 
-/**
- * UserProfileRepository.
- *
- * У застосунку лише один профіль користувача, тому зберігаємо як єдиний запис
- * у колекції з фіксованим id='me'.
- */
 export default class UserProfileRepository {
   constructor(storageModule = storage, apiModule = profileApi) {
     this.storage = storageModule;

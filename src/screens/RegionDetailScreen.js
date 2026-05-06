@@ -30,7 +30,7 @@ export default function RegionDetailScreen({ route }) {
   } = useTravel();
 
   // =========================
-  // 🔥 REGION SAFE ACCESS
+  // REGION SAFE ACCESS
   // =========================
   const region = useMemo(() => {
     const list = regions?.[countryId] || [];
@@ -49,7 +49,7 @@ export default function RegionDetailScreen({ route }) {
   const photos = Array.isArray(region.photos) ? region.photos : [];
 
   // =========================
-  // 📝 NOTE WITH DEBOUNCE
+  // NOTE WITH DEBOUNCE
   // =========================
   const [localNote, setLocalNote] = useState(region.note || '');
   const debounceTimer = useRef(null);
@@ -63,7 +63,7 @@ export default function RegionDetailScreen({ route }) {
   }, [countryId, regionName, updateRegionNote]);
 
   // =========================
-  // 📸 PICK IMAGE
+  // PICK IMAGE
   // =========================
   const pickImage = async () => {
   try {
@@ -150,12 +150,12 @@ export default function RegionDetailScreen({ route }) {
       return (
         <View key={`photo-${index}`} style={styles.photoWrapper}>
           
-          {/* 🔥 КЛИК ПО ФОТО */}
+          {/* КЛИК ПО ФОТО */}
           <TouchableOpacity onPress={() => setSelectedPhoto(uri)}>
             <Image source={{ uri }} style={styles.photo} />
           </TouchableOpacity>
 
-          {/* 🔥 УДАЛЕНИЕ */}
+          {/* УДАЛЕНИЕ */}
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleDelete(uri)}
@@ -175,7 +175,7 @@ export default function RegionDetailScreen({ route }) {
     </ScrollView>
 
     {/* =========================
-        🔥 FULLSCREEN MODAL
+        FULLSCREEN MODAL
     ========================= */}
     <Modal visible={!!selectedPhoto} transparent>
       <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center' }}>
@@ -198,7 +198,7 @@ export default function RegionDetailScreen({ route }) {
 }
 
 // =========================
-// 🎨 STYLES
+// STYLES
 // =========================
 
 const styles = StyleSheet.create({
@@ -249,7 +249,7 @@ photo: {
   width: '100%',
   height: 200,
   borderRadius: 10,
-  resizeMode: 'contain', // 🔥 ВАЖНО
+  resizeMode: 'contain', // ВАЖНО
 },
 
   deleteBtn: {

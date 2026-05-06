@@ -1,13 +1,3 @@
-/**
- * src/screens/LiveFeedScreen.js
- *
- * ВИПРАВЛЕННЯ:
- * 1. Ачивки — тільки з `achievement_unlocks`, таблицю `user_achievements` не чіпаємо
- * 2. Дедублікація при злитті: унікальний ключ = тип + id рядка
- * 3. Сортування: загальний список за часом (нові зверху)
- * 4. Канал для ачивок слухає `achievement_unlocks`
- */
-
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,

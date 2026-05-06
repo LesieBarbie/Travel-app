@@ -1,12 +1,3 @@
-/**
- * src/screens/FriendsScreen.js
- *
- * — Кнопка 📡 відкриває стрічку (LiveFeedScreen) у тому ж стеку
- * — Тап по другу → FriendProfileScreen
- * — Кнопка ✕ → видалити друга
- * — Запити вгорі як секція (без окремого табу)
- */
-
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,

@@ -1,13 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../api/supabaseClient';
 
-/**
- * AuthContext — централізований стан авторизації.
- *
- * Слухає зміни сесії Supabase і автоматично оновлює user.
- * Доступний через хук useAuth() у будь-якому компоненті.
- */
-
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -35,9 +28,6 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ===========================
-  // Дії
-  // ===========================
 
   const signUp = async (email, password) => {
     const { data, error } = await supabase.auth.signUp({

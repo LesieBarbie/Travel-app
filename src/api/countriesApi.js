@@ -1,33 +1,4 @@
 import { supabase } from './supabaseClient';
-
-/**
- * ============================================================
- * API для роботи з країнами (Supabase + PostgreSQL)
- * ============================================================
- *
- * Усі запити йдуть через @supabase/supabase-js, який під капотом
- * робить HTTP-запити до Supabase REST API (PostgREST).
- *
- * Кожен користувач бачить ТІЛЬКИ свої дані завдяки RLS
- * (Row Level Security), яку ми налаштували у SQL.
- *
- * Ендпоінти (під капотом це REST):
- *
- *   GET    /rest/v1/countries?user_id=eq.<id>     → список країн користувача
- *   GET    /rest/v1/countries?id=eq.<id>          → одна країна
- *   POST   /rest/v1/countries                     → створити
- *   PATCH  /rest/v1/countries?id=eq.<id>          → оновити
- *   DELETE /rest/v1/countries?id=eq.<id>          → видалити
- */
-
-// ============================================================
-// READ
-// ============================================================
-
-/**
- * Отримати всі країни поточного користувача.
- * RLS автоматично фільтрує за user_id.
- */
 export async function fetchVisitedCountries() {
   const { data, error } = await supabase
     .from('countries')
@@ -56,14 +27,6 @@ export async function fetchCountryByCode(countryCode) {
   return data ? toAppFormat(data) : null;
 }
 
-// ============================================================
-// CREATE / UPDATE — UPSERT (одночасно створює або оновлює)
-// ============================================================
-
-/**
- * Зберегти або оновити країну.
- * upsert по (user_id, country_code) — якщо запис є, оновлюється; якщо ні — створюється.
- */
 export async function upsertCountry(country) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

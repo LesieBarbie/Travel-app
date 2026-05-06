@@ -1,21 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/**
- * Обгортка над AsyncStorage, що реалізує 4 операції CRUD для колекцій:
- *  - saveItem   — зберегти один об'єкт у колекції (create/update)
- *  - getList    — прочитати весь список
- *  - getItem    — прочитати один об'єкт за id
- *  - deleteItem — видалити один об'єкт за id
- *
- * Дані зберігаються у форматі:
- *   ключ колекції → JSON-масив об'єктів
- *
- * Наприклад, для колекції 'countries':
- *   key = 'collection:countries'
- *   value = '[{"id":"276","name":"Німеччина",...}, ...]'
- */
-
-// Ключі колекцій - використовуються як назви "таблиць"
 export const COLLECTIONS = {
   COUNTRIES: 'countries',         // відвідані + мрії
   ACHIEVEMENTS: 'achievements',   // отримані ачівки
@@ -139,7 +123,6 @@ export async function saveMeta(key, value) {
   }
 }
 
-// --- Legacy API (залишено для сумісності зі старим кодом) ---
 
 const LEGACY_KEYS = {
   VISITED: 'visited_countries',

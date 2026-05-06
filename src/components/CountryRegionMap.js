@@ -14,9 +14,6 @@ import { TapGestureHandler, State } from 'react-native-gesture-handler';
 const { width: SCREEN_W } = Dimensions.get('window');
 const MAP_HEIGHT = 380;
 
-// =========================
-// 🔥 NAME PARSER
-// =========================
 function getRegionName(feature, index) {
   const p = feature.properties || {};
   return (
@@ -44,9 +41,6 @@ export default function CountryRegionMap({
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
 
-  // =========================
-  // 🔥 LOAD DATA
-  // =========================
   useEffect(() => {
     setFeatures(null);
     setError(null);
@@ -90,9 +84,7 @@ export default function CountryRegionMap({
     loadData();
   }, [config]);
 
-  // =========================
-  // 🔥 PROJECTION
-  // =========================
+
   const { pathGen, projection, width, height } = useMemo(() => {
     const w = SCREEN_W - 20;
     const h = MAP_HEIGHT;
@@ -115,9 +107,6 @@ export default function CountryRegionMap({
     return { pathGen: geoPath(proj), projection: proj, width: w, height: h };
   }, [config, countryId]);
 
-  // =========================
-  // 🔥 PATHS
-  // =========================
   const paths = useMemo(() => {
     if (!features) return [];
 
@@ -138,9 +127,7 @@ export default function CountryRegionMap({
       .filter(Boolean);
   }, [features, pathGen]);
 
-  // =========================
-  // 🔥 TAP DETECTION
-  // =========================
+
   const onTap = (e) => {
     if (e.nativeEvent.state !== State.ACTIVE) return;
 
@@ -158,9 +145,7 @@ export default function CountryRegionMap({
     }
   };
 
-  // =========================
-  // 🔥 RENDER STATES
-  // =========================
+
   if (error) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -187,9 +172,7 @@ export default function CountryRegionMap({
     );
   }
 
-  // =========================
-  // 🔥 RENDER
-  // =========================
+
   return (
     <View style={styles.container}>
       <TapGestureHandler onHandlerStateChange={onTap}>
@@ -224,9 +207,7 @@ export default function CountryRegionMap({
   );
 }
 
-// =========================
-// 🎨 STYLES
-// =========================
+
 const styles = StyleSheet.create({
   container: {
     width: SCREEN_W - 20,

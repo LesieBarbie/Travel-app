@@ -1,10 +1,3 @@
-/**
- * src/screens/FriendProfileScreen.js  ← НОВИЙ ФАЙЛ
- *
- * Показує профіль друга: відвідані країни та ачивки.
- * Отримує: friendId, friendshipId, username через route.params
- */
-
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,

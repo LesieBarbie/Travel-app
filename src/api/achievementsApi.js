@@ -1,15 +1,5 @@
 import { apiClient } from './client';
 import { ACHIEVEMENTS } from '../data/achievements';
-
-/**
- * API для досягнень.
- *
- *  GET  /achievements               → список усіх можливих досягнень
- *  GET  /users/me/achievements      → розблоковані досягнення користувача
- *  POST /users/me/achievements      → позначити ачівку як отриману
- *                                     body: { achievementId, unlockedAt }
- */
-
 export async function fetchAllAchievements() {
   return apiClient.get('/achievements', () => {
     return ACHIEVEMENTS.map((a) => ({

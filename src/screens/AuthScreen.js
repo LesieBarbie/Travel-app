@@ -14,10 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
-/**
- * Екран логіну/реєстрації.
- * Перемикач між двома режимами через стан isSignUp.
- */
+
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
   const { signIn, signUp } = useAuth();

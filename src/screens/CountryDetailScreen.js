@@ -38,7 +38,7 @@ export default function CountryDetailScreen({ route, navigation }) {
   } = useTravel();
 
   // =========================
-  // 📸 FULLSCREEN VIEW
+  // FULLSCREEN VIEW
   // =========================
   const [selectedPhoto, setSelectedPhoto] = useState(null);
 
@@ -66,7 +66,7 @@ export default function CountryDetailScreen({ route, navigation }) {
   const photos = Array.isArray(country.photos) ? country.photos : [];
 
   // =========================
-  // 📝 NOTE WITH DEBOUNCE
+  // NOTE WITH DEBOUNCE
   // =========================
   const [localNote, setLocalNote] = useState(country.note || '');
   const debounceTimer = useRef(null);
@@ -83,7 +83,7 @@ export default function CountryDetailScreen({ route, navigation }) {
   );
 
   // =========================
-  // 📸 PICK IMAGE
+  // PICK IMAGE
   // =========================
   const pickImage = async () => {
     try {
@@ -136,7 +136,7 @@ export default function CountryDetailScreen({ route, navigation }) {
   };
 
   // =========================
-  // 📤 SHARE COUNTRY (Deep Link)
+  // SHARE COUNTRY (Deep Link)
   // =========================
   const handleShare = async () => {
     try {

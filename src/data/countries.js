@@ -1,7 +1,3 @@
-
-// Список країн з континентами та ISO-кодами.
-// ID збігається з ID з world-atlas (той самий, що ти використовував у веб-версії).
-
 export const COUNTRIES = [
   // Європа
   { id: '008', name: 'Албанія', continent: 'Європа' },
@@ -213,14 +209,6 @@ export const COUNTRIES = [
 ];
 
 
-/**
- * Країни з детальною картою регіонів.
- * - url: посилання на GeoJSON або TopoJSON
- * - topojsonObject: (опціонально) ключ всередині TopoJSON
- * - center, scale: параметри проекції Mercator
- * - nameField: (опціонально) яке поле properties містить назву регіону
- *   (якщо не вказано — перебираємо стандартні: name, NAME, NAME_1, shapeName, nom)
- */
 export const COUNTRIES_WITH_REGIONS = {
   '276': {
     name: 'Німеччина',

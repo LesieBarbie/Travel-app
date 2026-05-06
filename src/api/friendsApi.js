@@ -1,9 +1,3 @@
-/**
- * src/api/friendsApi.js
- *
- * Додано: removeFriend(friendshipId)
- */
-
 import { supabase } from './supabaseClient';
 import { nanoid } from 'nanoid/non-secure';
 import * as Linking from 'expo-linking';

@@ -72,7 +72,6 @@ function getColor(name, id) {
   return '#d6d6d6';
 }
 
-// 🔥 оновлення кольорів
 function applyColors() {
   if (!world || !countries.length) return;
 
@@ -128,7 +127,7 @@ function resizeGlobe() {
 window.addEventListener('resize', resizeGlobe);
 resizeGlobe();
 
-// 🔥 КЛІК ПО КРАЇНІ
+// КЛІК ПО КРАЇНІ
 world.onPolygonClick(function(feat) {
   if (window.ReactNativeWebView) {
     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -199,7 +198,7 @@ world.controls().autoRotate = false;
       if (data.type === 'ready') {
         setWebReady(true);
       } 
-      // 🔥 ГОЛОВНА ЗМІНА
+      // ГОЛОВНА ЗМІНА
       else if (data.type === 'countryClick') {
         onCountryPress?.(data.id, data.name);
       }

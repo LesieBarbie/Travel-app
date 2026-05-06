@@ -12,20 +12,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DeepLinkRouter from '../navigation/DeepLinkRouter';
 
-/**
- * Debug Screen — екран для розробника.
- *
- * Дозволяє тестувати deep links без реального зовнішнього посилання:
- *  - Поле введення URL
- *  - Кнопка "Відкрити" виконує DeepLinkRouter.handle(url)
- *  - Готові приклади URL (preset кнопки)
- *  - Перегляд результату парсингу (parseURL)
- *  - Можливість поділитись будь-яким URL через системний Share
- *
- * Якщо емулятор/девайс не підтримує Universal Links —
- * через цей екран можна перевірити всю логіку маршрутизації.
- */
-
 const PRESETS = [
   { label: '🏠 Home', url: 'travelmap://home' },
   { label: '🇩🇪 Country (Germany)', url: 'travelmap://country/276' },

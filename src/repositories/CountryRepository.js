@@ -3,24 +3,6 @@ import * as storage from '../utils/storage';
 import * as countriesApi from '../api/countriesApi';
 import NetInfo from '@react-native-community/netinfo';
 
-/**
- * ============================================================
- * CountryRepository (Offline-first з реальним Supabase API)
- * ============================================================
- *
- * Реалізує патерн Repository: єдина точка доступу до даних про країни.
- * Приховує від бізнес-логіки те, звідки саме беруться дані — локальне
- * сховище чи сервер.
- *
- * СТРАТЕГІЯ: Offline-first
- * ------------------------
- * - UI завжди читає з локального сховища → миттєва відповідь, працює без інтернету.
- * - Зміни спочатку зберігаються локально з syncStatus='pending'.
- * - Перед запитом до Supabase перевіряємо мережу через NetInfo.
- *   Якщо мережі немає — пропускаємо запит, запис залишається 'pending'.
- * - Коли мережа з'явиться, NetInfo-listener у TravelContext тригерить
- *   syncPending() автоматично.
- */
 export default class CountryRepository {
   constructor(storageModule = storage, apiModule = countriesApi) {
     this.storage = storageModule;
@@ -66,14 +48,7 @@ export default class CountryRepository {
     return existed;
   }
 
-  // ==========================================================
-  // СИНХРОНІЗАЦІЯ (внутрішні методи з перевіркою мережі)
-  // ==========================================================
 
-  /**
-   * Спроба синхронізації, яка НЕ кидає помилок.
-   * Якщо мережі немає — просто пропускаємо, запис залишиться 'pending'.
-   */
   async _safeSyncCountry(country) {
     try {
       // 1. Перевіряємо мережу ДО запиту

@@ -1,6 +1,3 @@
-// Список досягнень. Кожне має функцію check(),
-// яка отримує visited/dream-країни та повертає true якщо досягнення отримано.
-
 import { COUNTRIES } from './countries';
 
 const countInContinent = (visited, continent) =>

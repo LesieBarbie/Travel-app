@@ -1,10 +1,3 @@
-/**
- * src/repositories/AchievementRepository.js
- *
- * Пише в таблицю `achievement_unlocks`:
- *   id, user_id, achievement_id, achievement_title, created_at
- */
-
 import Achievement from '../models/Achievement';
 import * as storage from '../utils/storage';
 import { supabase } from '../api/supabaseClient';

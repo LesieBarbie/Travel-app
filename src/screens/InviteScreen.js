@@ -1,7 +1,3 @@
-/**
- * src/screens/InviteScreen.js  ← ЗАМЕНИТЬ
- */
-
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,

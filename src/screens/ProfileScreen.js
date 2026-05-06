@@ -1,7 +1,3 @@
-/**
- * src/screens/ProfileScreen.js
- */
-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useEffect, useMemo, useState } from 'react';
 import {

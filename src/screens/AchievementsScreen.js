@@ -5,11 +5,6 @@ import { useTravel } from '../context/TravelContext';
 import { ACHIEVEMENTS } from '../data/achievements';
 import Achievement from '../models/Achievement';
 
-/**
- * Екран досягнень. Використовує модель Achievement як об'єкти,
- * які рендеряться у UI (поля title, description, icon, unlocked
- * беруться з екземплярів моделі).
- */
 export default function AchievementsScreen() {
   const insets = useSafeAreaInsets();
   const { visited, dream } = useTravel();
