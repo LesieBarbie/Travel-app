@@ -1,16 +1,5 @@
 import * as Linking from 'expo-linking';
 
-/**
- * Конфігурація `linking` для React Navigation.
- *
- * Використовується у <NavigationContainer linking={linkingConfig}>.
- * React Navigation сама обробляє холодний/теплий старт через `expo-linking`,
- * парсить URL за `prefixes` і вивідить параметри через `config`.
- *
- * Працює паралельно з нашим DeepLinkRouter:
- *  - DeepLinkRouter — наш кастомний шар (для тестів і явного API)
- *  - linkingConfig — налаштування React Navigation (для автоматичного підхоплення URL)
- */
 export const linkingConfig = {
   prefixes: [
     Linking.createURL('/'),       // travelmap:// (від схеми у app.json)
@@ -35,6 +24,7 @@ export const linkingConfig = {
       Profile: 'profile',
       Security: 'security',
       Live: 'live',
+      Friends: 'friends',
       Invite: 'invite/:token',
       Debug: 'debug',
     },

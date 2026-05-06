@@ -36,6 +36,8 @@ import { biometricManager } from './src/utils/BiometricManager';
 import { linkingConfig } from './src/navigation/linkingConfig';
 import DeepLinkRouter from './src/navigation/DeepLinkRouter';
 
+import FriendsScreen from './src/screens/FriendsScreen';
+
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
   'Each child in a list should have a unique "key" prop',
@@ -148,6 +150,11 @@ function MainTabs() {
         name="Debug"
         component={DebugScreen}
         options={{ title: 'Debug', tabBarIcon: tabIcon('🛠️') }}
+      />
+      <Tab.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{ title: 'Друзі', tabBarIcon: tabIcon('👥') }}
       />
     </Tab.Navigator>
   );
