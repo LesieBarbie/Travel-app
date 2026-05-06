@@ -1,14 +1,19 @@
 /**
- * src/screens/FriendsScreen.js  ← ЗАМЕНИТЬ
+ * src/screens/FriendsScreen.js
+ *
+ * Зміни:
+ * — таб «Запити» видалено, замість нього — секція уведомлень прямо в списку
+ * — запити на дружбу показуються вгорі списку (якщо є)
+ * — повідомлення про запрошення компактніше
+ * — текст запрошення оновлено: Wish2Go Map + без рядка Production build
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, ActivityIndicator, Alert, Share, RefreshControl,
+  SectionList, ActivityIndicator, Alert, Share, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
 import {
   getFriends,
   getPendingRequests,
@@ -19,11 +24,10 @@ import {
 
 export default function FriendsScreen() {
   const insets = useSafeAreaInsets();
-  const [friends, setFriends] = useState([]);
-  const [pending, setPending] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [friends, setFriends]     = useState([]);
+  const [pending, setPending]     = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState('friends');
   const [generatingInvite, setGeneratingInvite] = useState(false);
 
   const load = useCallback(async (silent = false) => {
@@ -42,46 +46,34 @@ export default function FriendsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    load(true);
-  };
+  const onRefresh = () => { setRefreshing(true); load(true); };
 
   const handleAccept = async (friendshipId) => {
     try {
       await acceptFriendRequest(friendshipId);
       load(true);
-    } catch (e) {
-      Alert.alert('Помилка', e.message);
-    }
+    } catch (e) { Alert.alert('Помилка', e.message); }
   };
 
   const handleDecline = async (friendshipId) => {
     try {
       await declineFriendRequest(friendshipId);
       load(true);
-    } catch (e) {
-      Alert.alert('Помилка', e.message);
-    }
+    } catch (e) { Alert.alert('Помилка', e.message); }
   };
 
   const handleInvite = async () => {
     setGeneratingInvite(true);
     try {
       const { token, link } = await createInviteToken();
-
-      // Посилання для Expo Go (exp://...)
-      const expoLink = link;
-      // Посилання для production build (travelmap://...)
       const productionLink = `travelmap://invite/${token}`;
 
       await Share.share({
         message:
-          `Привіт! Долучайся до Travel Wish Map 🌍\n\n` +
-          `📱 Expo Go — відкрий посилання:\n${expoLink}\n\n` +
-          `🔗 Production build:\n${productionLink}\n\n` +
-          `🔑 Або введи токен вручну в розділі «Друзі»:\n${token}`,
-        title: 'Запрошення до Travel Wish Map',
+          `Привіт! Долучайся до Wish2Go Map 🌍\n\n` +
+          `📱 Expo Go — відкрий посилання:\n${link}\n\n` +
+          `🔑 Або введи посилання вручну в застосунку:\n${productionLink}`,
+        title: 'Запрошення до Wish2Go Map',
       });
     } catch (e) {
       if (e.message !== 'User did not share') {
@@ -100,6 +92,17 @@ export default function FriendsScreen() {
     );
   }
 
+  // Збираємо секції: спершу запити (якщо є), потім друзі
+  const sections = [];
+  if (pending.length > 0) {
+    sections.push({ title: `Запити в друзі (${pending.length})`, type: 'requests', data: pending });
+  }
+  sections.push({
+    title: friends.length > 0 ? `Мої друзі (${friends.length})` : 'Мої друзі',
+    type: 'friends',
+    data: friends,
+  });
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Хедер */}
@@ -117,44 +120,66 @@ export default function FriendsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Таби */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'friends' && styles.tabActive]}
-          onPress={() => setTab('friends')}
-        >
-          <Text style={[styles.tabText, tab === 'friends' && styles.tabTextActive]}>
-            Друзі {friends.length > 0 ? `(${friends.length})` : ''}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'requests' && styles.tabActive]}
-          onPress={() => setTab('requests')}
-        >
-          <Text style={[styles.tabText, tab === 'requests' && styles.tabTextActive]}>
-            Запити {pending.length > 0 ? `(${pending.length})` : ''}
-          </Text>
-          {pending.length > 0 && <View style={styles.badge} />}
-        </TouchableOpacity>
-      </View>
+      <SectionList
+        sections={sections}
+        keyExtractor={item => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={{ paddingBottom: 30 }}
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            {section.type === 'requests' && (
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>{section.data.length}</Text>
+              </View>
+            )}
+            <Text style={[
+              styles.sectionTitle,
+              section.type === 'requests' && styles.sectionTitleRequest,
+            ]}>
+              {section.title}
+            </Text>
+          </View>
+        )}
+        renderItem={({ item, section }) => {
+          if (section.type === 'requests') {
+            return (
+              <View style={[styles.card, styles.cardRequest]}>
+                <View style={[styles.avatar, styles.avatarRequest]}>
+                  <Text style={styles.avatarText}>
+                    {(item.sender?.username || '?')[0].toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardName}>{item.sender?.username}</Text>
+                  <Text style={styles.cardSub}>Хоче додати тебе в друзі</Text>
+                </View>
+                <View style={styles.actions}>
+                  <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(item.id)}>
+                    <Text style={styles.acceptText}>✓</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.declineBtn} onPress={() => handleDecline(item.id)}>
+                    <Text style={styles.declineText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }
 
-      {/* Список друзів */}
-      {tab === 'friends' && (
-        <FlatList
-          data={friends}
-          keyExtractor={item => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={friends.length === 0 ? styles.emptyContainer : { paddingBottom: 20 }}
-          ListEmptyComponent={() => (
-            <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>🌍</Text>
-              <Text style={styles.emptyTitle}>Ще немає друзів</Text>
-              <Text style={styles.emptyText}>
-                Натисни «+ Запросити» щоб поділитися посиланням
-              </Text>
-            </View>
-          )}
-          renderItem={({ item }) => (
+          // friends
+          if (section.data.length === 0) {
+            return (
+              <View style={styles.empty}>
+                <Text style={styles.emptyIcon}>🌍</Text>
+                <Text style={styles.emptyTitle}>Ще немає друзів</Text>
+                <Text style={styles.emptyText}>
+                  Натисни «+ Запросити» щоб поділитися посиланням
+                </Text>
+              </View>
+            );
+          }
+
+          return (
             <View style={styles.card}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
@@ -163,56 +188,23 @@ export default function FriendsScreen() {
               </View>
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{item.username}</Text>
-                <Text style={styles.cardSub}>Друг</Text>
-              </View>
-            </View>
-          )}
-        />
-      )}
-
-      {/* Список запитів */}
-      {tab === 'requests' && (
-        <FlatList
-          data={pending}
-          keyExtractor={item => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={pending.length === 0 ? styles.emptyContainer : { paddingBottom: 20 }}
-          ListEmptyComponent={() => (
-            <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>📬</Text>
-              <Text style={styles.emptyTitle}>Немає запитів</Text>
-              <Text style={styles.emptyText}>Нові запити з'являться тут</Text>
-            </View>
-          )}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {(item.sender?.username || '?')[0].toUpperCase()}
+                <Text style={styles.cardSub}>
+                  {item.visitedCount != null ? `${item.visitedCount} країн` : 'Друг'}
                 </Text>
               </View>
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{item.sender?.username}</Text>
-                <Text style={styles.cardSub}>Хоче додати тебе в друзі</Text>
-              </View>
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.acceptBtn}
-                  onPress={() => handleAccept(item.id)}
-                >
-                  <Text style={styles.acceptText}>✓</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.declineBtn}
-                  onPress={() => handleDecline(item.id)}
-                >
-                  <Text style={styles.declineText}>✕</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          )}
-        />
-      )}
+          );
+        }}
+        ListEmptyComponent={friends.length === 0 && pending.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>🌍</Text>
+            <Text style={styles.emptyTitle}>Ще немає друзів</Text>
+            <Text style={styles.emptyText}>
+              Натисни «+ Запросити» щоб поділитися посиланням
+            </Text>
+          </View>
+        ) : null}
+      />
     </View>
   );
 }
@@ -243,34 +235,40 @@ const styles = StyleSheet.create({
   inviteBtnDisabled: { opacity: 0.6 },
   inviteBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  tabs: {
+  sectionHeader: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 6,
+    gap: 8,
   },
-  tab: {
-    flex: 1, paddingVertical: 12,
-    alignItems: 'center', flexDirection: 'row',
-    justifyContent: 'center', gap: 6,
+  sectionTitle: { fontSize: 13, fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionTitleRequest: { color: '#e65100' },
+  sectionBadge: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#e53935',
+    justifyContent: 'center', alignItems: 'center',
   },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#2e7d32' },
-  tabText: { fontSize: 14, color: '#999', fontWeight: '500' },
-  tabTextActive: { color: '#2e7d32', fontWeight: '700' },
-  badge: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#e53935', marginLeft: 4 },
+  sectionBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   card: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff',
-    marginHorizontal: 16, marginTop: 10,
+    marginHorizontal: 16, marginBottom: 8,
     padding: 14, borderRadius: 14,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  cardRequest: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#ff8f00',
   },
   avatar: {
     width: 46, height: 46, borderRadius: 23,
     backgroundColor: '#c8e6c9',
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
+  avatarRequest: { backgroundColor: '#ffe0b2' },
   avatarText: { fontSize: 20, fontWeight: '700', color: '#2e7d32' },
   cardInfo: { flex: 1 },
   cardName: { fontSize: 16, fontWeight: '600', color: '#222' },
@@ -290,8 +288,7 @@ const styles = StyleSheet.create({
   },
   declineText: { color: '#e53935', fontSize: 14, fontWeight: '700' },
 
-  emptyContainer: { flex: 1 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyIcon: { fontSize: 52 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 16 },
   emptyText: { fontSize: 14, color: '#999', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 },

@@ -24,9 +24,6 @@ export function TravelProvider({ children }) {
   const [pendingToast, setPendingToast] = useState(null);
   const toastQueue = useRef([]);
 
-  // ============================================================
-  // Початкове завантаження (локалка) — один раз
-  // ============================================================
   useEffect(() => {
     (async () => {
       await migrateLegacyData();
@@ -41,9 +38,6 @@ export function TravelProvider({ children }) {
     })();
   }, []);
 
-  // ============================================================
-  // Pull з Supabase при логіні
-  // ============================================================
   useEffect(() => {
     if (!user || !loaded) return;
     (async () => {
@@ -58,9 +52,6 @@ export function TravelProvider({ children }) {
     })();
   }, [user, loaded]);
 
-  // ============================================================
-  // Автосинхронізація: коли мережа з'явилась — пушимо pending-записи
-  // ============================================================
   useEffect(() => {
     if (!user || !loaded) return;
 
@@ -69,14 +60,12 @@ export function TravelProvider({ children }) {
     const unsubscribe = NetInfo.addEventListener((state) => {
       const isConnected = state.isConnected && state.isInternetReachable !== false;
 
-      // Реагуємо тільки на перехід з offline → online (а не кожен тригер)
       if (isConnected && !lastConnected) {
         console.log('[Auto-sync] Network is back, syncing pending records...');
         countryRepo.syncPending()
           .then(async (result) => {
             if (result.synced > 0 || result.failed > 0) {
               console.log(`[Auto-sync] Done: synced=${result.synced}, failed=${result.failed}`);
-              // Оновлюємо UI з актуальними даними
               await updateStateFromRepo();
             }
           })
@@ -106,6 +95,8 @@ export function TravelProvider({ children }) {
     if (!pendingToast) showNextToast();
   };
 
+  // ВИПРАВЛЕННЯ: тепер зберігаємо ачивку в Supabase через achievementRepo
+  // щоб друзі бачили її в стрічці через Realtime
   const checkAchievements = (newVisited) => {
     for (const ach of ACHIEVEMENTS) {
       if (notifiedAchievements.includes(ach.id)) continue;
@@ -113,6 +104,20 @@ export function TravelProvider({ children }) {
         setNotifiedAchievements(prev => [...prev, ach.id]);
         sendAchievementNotification(ach).catch(() => {});
         queueToast(ach);
+
+        // Зберігаємо в Supabase (фоново, не блокуємо UI)
+        const achToSave = {
+          id: ach.id,
+          title: ach.title,
+          description: ach.description,
+          icon: ach.icon,
+          requiredCount: 0,
+          unlocked: true,
+          unlockedAt: new Date().toISOString(),
+        };
+        achievementRepo.save(achToSave).catch((e) =>
+          console.warn('[TravelContext] Failed to save achievement:', ach.id, e.message)
+        );
       }
     }
   };
@@ -220,7 +225,6 @@ export function TravelProvider({ children }) {
   const syncPending = async () => {
     try {
       const result = await countryRepo.syncPending();
-      // Після push - ще раз pull, щоб підхопити можливі зміни з інших пристроїв
       await countryRepo.pullFromServer();
       await updateStateFromRepo();
       return result;

@@ -1,21 +1,20 @@
+/**
+ * src/repositories/AchievementRepository.js
+ *
+ * Пише в таблицю `achievement_unlocks`:
+ *   id, user_id, achievement_id, achievement_title, created_at
+ */
+
 import Achievement from '../models/Achievement';
 import * as storage from '../utils/storage';
-import * as achievementsApi from '../api/achievementsApi';
+import { supabase } from '../api/supabaseClient';
+import { ACHIEVEMENTS } from '../data/achievements';
 
-/**
- * AchievementRepository — поєднує локальне сховище та API для досягнень.
- *
- * Стратегія: Offline-first (та сама, що й для країн).
- * Досягнення розблоковуються локально, потім синхронізуються з сервером.
- */
 export default class AchievementRepository {
-  constructor(storageModule = storage, apiModule = achievementsApi) {
+  constructor(storageModule = storage) {
     this.storage = storageModule;
-    this.api = apiModule;
     this.collection = storage.COLLECTIONS.ACHIEVEMENTS;
   }
-
-  // --- 4 локальні CRUD операції ---
 
   async getAll() {
     const raw = await this.storage.getList(this.collection);
@@ -31,15 +30,50 @@ export default class AchievementRepository {
     if (!(achievement instanceof Achievement)) {
       achievement = Achievement.fromJSON(achievement);
     }
+    // 1. Локально
     await this.storage.saveItem(this.collection, achievement.toJSON());
-    // Фонова синхронізація
-    this.api.postUnlockedAchievement(achievement).catch((e) =>
-      console.warn('Achievement sync failed', achievement.id, e.message)
+
+    // 2. Supabase — щоб друзі бачили в стрічці
+    this._syncToSupabase(achievement).catch((e) =>
+      console.warn('[AchievementRepo] sync failed:', achievement.id, e.message)
     );
+
     return achievement;
   }
 
   async delete(id) {
     return this.storage.deleteItem(this.collection, id);
+  }
+
+  async _syncToSupabase(achievement) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const meta = ACHIEVEMENTS.find(a => a.id === achievement.id);
+      const title = meta?.title || achievement.title || achievement.id;
+
+      const { error } = await supabase
+        .from('achievement_unlocks')
+        .upsert(
+          {
+            user_id: user.id,
+            achievement_id: achievement.id,
+            achievement_title: title,
+            created_at: achievement.unlockedAt instanceof Date
+              ? achievement.unlockedAt.toISOString()
+              : (achievement.unlockedAt || new Date().toISOString()),
+          },
+          { onConflict: 'user_id,achievement_id' }
+        );
+
+      if (error) {
+        console.warn('[AchievementRepo] upsert error:', error.message);
+      } else {
+        console.log('[AchievementRepo] synced to Supabase:', achievement.id);
+      }
+    } catch (e) {
+      console.warn('[AchievementRepo] _syncToSupabase error:', e.message);
+    }
   }
 }
