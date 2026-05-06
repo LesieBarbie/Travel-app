@@ -5,6 +5,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import CountryRepository from '../repositories/CountryRepository';
 import AchievementRepository from '../repositories/AchievementRepository';
 import { useAuth } from './AuthContext';
+import NetInfo from '@react-native-community/netinfo';
 
 const TravelContext = createContext(null);
 
@@ -55,6 +56,37 @@ export function TravelProvider({ children }) {
         console.warn('Pull from server failed:', e.message);
       }
     })();
+  }, [user, loaded]);
+
+  // ============================================================
+  // Автосинхронізація: коли мережа з'явилась — пушимо pending-записи
+  // ============================================================
+  useEffect(() => {
+    if (!user || !loaded) return;
+
+    let lastConnected = true;
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isConnected = state.isConnected && state.isInternetReachable !== false;
+
+      // Реагуємо тільки на перехід з offline → online (а не кожен тригер)
+      if (isConnected && !lastConnected) {
+        console.log('[Auto-sync] Network is back, syncing pending records...');
+        countryRepo.syncPending()
+          .then(async (result) => {
+            if (result.synced > 0 || result.failed > 0) {
+              console.log(`[Auto-sync] Done: synced=${result.synced}, failed=${result.failed}`);
+              // Оновлюємо UI з актуальними даними
+              await updateStateFromRepo();
+            }
+          })
+          .catch((e) => console.warn('[Auto-sync] Error:', e.message));
+      }
+
+      lastConnected = isConnected;
+    });
+
+    return () => unsubscribe();
   }, [user, loaded]);
 
   useEffect(() => { if (loaded) saveData(KEYS.REGIONS, regions); }, [regions, loaded]);

@@ -1,6 +1,7 @@
 import Country from '../models/Country';
 import * as storage from '../utils/storage';
 import * as countriesApi from '../api/countriesApi';
+import NetInfo from '@react-native-community/netinfo';
 
 /**
  * ============================================================
@@ -15,13 +16,10 @@ import * as countriesApi from '../api/countriesApi';
  * ------------------------
  * - UI завжди читає з локального сховища → миттєва відповідь, працює без інтернету.
  * - Зміни спочатку зберігаються локально з syncStatus='pending'.
- * - Паралельно запускаються фонові запити до Supabase.
- * - При успіху сервера — оновлюємо локальний запис з syncStatus='synced'.
- * - При помилці — syncStatus='error', запис залишається у черзі на пізніше.
- *
- * Залежності:
- *  - storage: утиліти з 4 CRUD операціями (getList, getItem, saveItem, deleteItem)
- *  - api:     модуль мережевих викликів (countriesApi → Supabase)
+ * - Перед запитом до Supabase перевіряємо мережу через NetInfo.
+ *   Якщо мережі немає — пропускаємо запит, запис залишається 'pending'.
+ * - Коли мережа з'явиться, NetInfo-listener у TravelContext тригерить
+ *   syncPending() автоматично.
  */
 export default class CountryRepository {
   constructor(storageModule = storage, apiModule = countriesApi) {
@@ -35,7 +33,6 @@ export default class CountryRepository {
   // ЛОКАЛЬНІ 4 CRUD ОПЕРАЦІЇ (викликаються UI)
   // ==========================================================
 
-  /** Прочитати список усіх позначених країн (відвідані + мрії). */
   async getAll() {
     const raw = await this.storage.getList(this.collection);
     return (Array.isArray(raw) ? raw : [])
@@ -43,13 +40,11 @@ export default class CountryRepository {
       .map((obj) => Country.fromJSON(obj));
   }
 
-  /** Прочитати одну країну за id. */
   async getById(id) {
     const obj = await this.storage.getItem(this.collection, id);
     return obj ? Country.fromJSON(obj) : null;
   }
 
-  /** Зберегти одну країну (create або update). */
   async save(country) {
     if (!(country instanceof Country)) {
       country = Country.fromJSON(country);
@@ -58,39 +53,66 @@ export default class CountryRepository {
     country.syncStatus = 'pending';
     await this.storage.saveItem(this.collection, country.toJSON());
 
-    // Відразу запускаємо синхронізацію (не блокуємо UI)
-    this.syncCountry(country).catch((e) =>
-      console.warn('Background sync failed', country.id, e.message)
-    );
+    // Тепер пробуємо синхронізувати — але БЕЗ помилок якщо нема мережі
+    this._safeSyncCountry(country);
     return country;
   }
 
-  /** Видалити країну за id. */
   async delete(id) {
     const existed = await this.storage.deleteItem(this.collection, id);
     if (existed) {
-      // Асинхронно повідомляємо сервер
-      this.api.deleteVisitedCountry(id).catch((e) =>
-        console.warn('Failed to delete on server', id, e.message)
-      );
+      this._safeDeleteOnServer(id);
     }
     return existed;
   }
 
   // ==========================================================
-  // СИНХРОНІЗАЦІЯ З SUPABASE
+  // СИНХРОНІЗАЦІЯ (внутрішні методи з перевіркою мережі)
   // ==========================================================
 
   /**
+   * Спроба синхронізації, яка НЕ кидає помилок.
+   * Якщо мережі немає — просто пропускаємо, запис залишиться 'pending'.
+   */
+  async _safeSyncCountry(country) {
+    try {
+      // 1. Перевіряємо мережу ДО запиту
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected && netState.isInternetReachable !== false;
+
+      if (!isOnline) {
+        // Тихо виходимо — запис лишається 'pending', потім автосинхронізація допоможе
+        return;
+      }
+
+      // 2. Тільки якщо мережа є — пробуємо синхронізувати
+      await this.syncCountry(country);
+    } catch (e) {
+      // На всякий випадок проковтуємо помилки — фон не повинен ламати UI
+      console.warn('[Repo] safe sync failed:', e.message);
+    }
+  }
+
+  async _safeDeleteOnServer(id) {
+    try {
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected && netState.isInternetReachable !== false;
+      if (!isOnline) return;
+
+      await this.api.deleteVisitedCountry(id);
+    } catch (e) {
+      console.warn('[Repo] safe delete failed:', e.message);
+    }
+  }
+
+  /**
    * Синхронізувати один запис з сервером.
-   * Викликається автоматично при save().
+   * Викликається з _safeSyncCountry або з syncPending.
    */
   async syncCountry(country) {
     try {
-      // Синхронізуємо тільки visited або dream записи
       if (!country.visited && !country.isDream) return;
 
-      // Нормалізуємо перед відправкою — захист від undefined полів
       const safeCountry = {
         ...country,
         note: country.note || '',
@@ -99,17 +121,14 @@ export default class CountryRepository {
       };
       const response = await this.api.upsertCountry(safeCountry);
 
-      // Сервер підтвердив → оновлюємо syncStatus локально
       const updated = await this.getById(country.id);
       if (updated) {
         updated.markSynced();
         await this.storage.saveItem(this.collection, updated.toJSON());
-        // Повідомляємо UI що синхронізація завершена
         this.onSyncComplete?.();
       }
       return response;
     } catch (e) {
-      // Помилка мережі → позначаємо як error, спробуємо пізніше
       try {
         const failed = await this.getById(country.id);
         if (failed) {
@@ -117,16 +136,20 @@ export default class CountryRepository {
           await this.storage.saveItem(this.collection, failed.toJSON());
         }
       } catch (_) {}
-      // не кидаємо далі — фонова помилка не повинна ламати UI
+      throw e;
     }
   }
 
   /**
    * Pull-синхронізація: тягне всі країни з Supabase і кладе у локалку.
-   * Викликається після логіну з нового пристрою.
    */
   async pullFromServer() {
     try {
+      // Перевіряємо мережу
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected && netState.isInternetReachable !== false;
+      if (!isOnline) return { synced: 0 };
+
       const remote = await this.api.fetchVisitedCountries();
       if (!Array.isArray(remote)) return { synced: 0 };
 
@@ -134,7 +157,6 @@ export default class CountryRepository {
       for (const remoteItem of remote) {
         if (!remoteItem || !remoteItem.id) continue;
 
-        // Зберігаємо в локалку як synced
         const existing = await this.storage.getItem(this.collection, remoteItem.id);
         const merged = {
           ...(existing || {}),
@@ -150,19 +172,15 @@ export default class CountryRepository {
       return { synced: count };
     } catch (e) {
       console.warn('pullFromServer failed:', e.message);
-      throw e;
+      return { synced: 0 };
     }
   }
 
   /**
    * Старий метод getAllWithBackgroundSync — залишений для сумісності.
-   * Тепер просто читає локалку і викликає pullFromServer у фоні.
    */
   async getAllWithBackgroundSync(onRemoteUpdate) {
-    // 1. Одразу повертаємо локальне
     const local = await this.getAll();
-
-    // 2. У фоні тягнемо з сервера
     this.pullFromServer()
       .then(async () => {
         const updated = await this.getAll();
@@ -170,30 +188,39 @@ export default class CountryRepository {
       })
       .catch((e) => {
         console.warn('Background fetch failed:', e.message);
-        // Нічого не робимо - працюємо з локальних даних
       });
-
     return local;
   }
 
   /**
    * Синхронізувати всі 'pending' / 'error' записи з сервером.
-   * Викликається при появі мережі або з кнопки "Синхронізувати зараз".
+   * Викликається при появі мережі (через NetInfo listener у TravelContext).
    */
   async syncPending() {
-    const all = await this.getAll();
-    if (!Array.isArray(all)) return { synced: 0, failed: 0 };
-    const pending = all.filter((c) => c && typeof c.needsSync === 'function' && c.needsSync());
+    try {
+      // Перевіряємо мережу — нема сенсу пробувати без інтернету
+      const netState = await NetInfo.fetch();
+      const isOnline = netState.isConnected && netState.isInternetReachable !== false;
+      if (!isOnline) return { synced: 0, failed: 0 };
 
-    const results = { synced: 0, failed: 0 };
-    for (const c of pending) {
-      try {
-        await this.syncCountry(c);
-        results.synced++;
-      } catch {
-        results.failed++;
+      const all = await this.getAll();
+      if (!Array.isArray(all)) return { synced: 0, failed: 0 };
+
+      const pending = all.filter((c) => c && typeof c.needsSync === 'function' && c.needsSync());
+
+      const results = { synced: 0, failed: 0 };
+      for (const c of pending) {
+        try {
+          await this.syncCountry(c);
+          results.synced++;
+        } catch {
+          results.failed++;
+        }
       }
+      return results;
+    } catch (e) {
+      console.warn('syncPending failed:', e.message);
+      return { synced: 0, failed: 0 };
     }
-    return results;
   }
 }
